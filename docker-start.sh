@@ -27,5 +27,5 @@ if ! command -v systemctl &> /dev/null; then
 fi
 
 # Start the Node.js application
-echo "✅ Starting Node.js application on port ${PORT:-3000}..."
+echo "✅ Starting Node.js application on port ${PORT:-3033}..."
 exec npm start

@@ -51,7 +51,7 @@ app.use((req, res) => {
   res.status(404).render('404', { title: 'Page Not Found' });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3033;
 server.listen(PORT, () => {
   console.log(`Cloudflare Tunnel Admin Panel running on port ${PORT}`);
   console.log(`Access the panel at: http://localhost:${PORT}`);
