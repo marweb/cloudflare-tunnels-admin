@@ -121,12 +121,20 @@ class TunnelController {
       await this.config.writeConfig(name, configContent);
 
       // Create systemd service
+      console.log(`⚙️ Creating systemd service for tunnel: ${name}`);
       await this.config.writeSystemdService(name);
 
       // Enable and start service if requested
+      console.log(`🔄 Auto-start requested:`, autoStart);
       if (autoStart) {
+        console.log(`✅ Enabling service for tunnel: ${name}`);
         await this.systemd.enableService(name);
-        await this.systemd.startService(name);
+        
+        console.log(`🚀 Starting service for tunnel: ${name}`);
+        const startResult = await this.systemd.startService(name);
+        console.log(`🚀 Start service result:`, startResult);
+      } else {
+        console.log(`⏸️ Auto-start not requested, tunnel created but not started`);
       }
 
       res.json({ 

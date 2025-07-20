@@ -32,38 +32,67 @@ class SystemdManager {
     const serviceName = this.getServiceName(tunnelName);
     
     try {
-      // Check if process is running using pgrep with more specific pattern
+      // Check if process is running using multiple detection methods
       return new Promise((resolve) => {
-        const pgrepCommand = `pgrep -f "cloudflared.*tunnel.*${tunnelName}"`;
-        console.log(`Checking status for tunnel ${tunnelName} with command: ${pgrepCommand}`);
+        console.log(`🔍 Checking status for tunnel ${tunnelName}`);
         
-        exec(pgrepCommand, (error, stdout, stderr) => {
-          console.log(`pgrep result for ${tunnelName}:`, { error: error?.code, stdout: stdout.trim(), stderr });
+        // First, let's see all cloudflared processes
+        exec('ps aux | grep cloudflared | grep -v grep', (psError, psStdout) => {
+          console.log(`🔍 All cloudflared processes:`);
+          console.log(psStdout || 'No cloudflared processes found');
           
-          if (error) {
-            // No processes found
-            console.log(`No active processes found for tunnel ${tunnelName}`);
-            resolve({
-              name: tunnelName,
-              service: serviceName,
-              active: false,
-              running: false,
-              status: 'inactive'
-            });
-          } else {
-            const pids = stdout.trim().split('\n').filter(pid => pid && pid.match(/^\d+$/));
-            console.log(`Found ${pids.length} active processes for tunnel ${tunnelName}:`, pids);
+          // Try multiple pgrep patterns
+          const patterns = [
+            `pgrep -f "cloudflared.*${tunnelName}"`,
+            `pgrep -f "cloudflared.*tunnel.*${tunnelName}"`,
+            `pgrep -f "${tunnelName}"`
+          ];
+          
+          let foundProcess = false;
+          let processCount = 0;
+          
+          const checkPattern = (patternIndex) => {
+            if (patternIndex >= patterns.length) {
+              // No patterns worked, tunnel is inactive
+              console.log(`🔍 No active processes found for tunnel ${tunnelName} with any pattern`);
+              resolve({
+                name: tunnelName,
+                service: serviceName,
+                active: false,
+                running: false,
+                status: 'inactive'
+              });
+              return;
+            }
             
-            const isActive = pids.length > 0;
-            resolve({
-              name: tunnelName,
-              service: serviceName,
-              active: isActive,
-              running: isActive,
-              status: isActive ? 'active' : 'inactive',
-              pids: pids
+            const pgrepCommand = patterns[patternIndex];
+            console.log(`🔍 Trying pattern ${patternIndex + 1}: ${pgrepCommand}`);
+            
+            exec(pgrepCommand, (error, stdout, stderr) => {
+              console.log(`🔍 Pattern ${patternIndex + 1} result:`, { error: error?.code, stdout: stdout.trim() });
+              
+              if (!error && stdout.trim()) {
+                const pids = stdout.trim().split('\n').filter(pid => pid && pid.match(/^\d+$/));
+                if (pids.length > 0) {
+                  console.log(`✅ Found ${pids.length} active processes for tunnel ${tunnelName}:`, pids);
+                  resolve({
+                    name: tunnelName,
+                    service: serviceName,
+                    active: true,
+                    running: true,
+                    status: 'active',
+                    pids: pids
+                  });
+                  return;
+                }
+              }
+              
+              // Try next pattern
+              checkPattern(patternIndex + 1);
             });
-          }
+          };
+          
+          checkPattern(0);
         });
       });
     } catch (error) {
