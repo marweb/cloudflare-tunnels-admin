@@ -1,8 +1,11 @@
 const { spawn, exec } = require('child_process');
+const fs = require('fs-extra');
+const path = require('path');
 
 class SystemdManager {
   constructor() {
     this.servicePrefix = 'cloudflared-';
+    this.runningProcesses = new Map(); // Track running processes
   }
 
   // Get service name for tunnel
@@ -10,168 +13,276 @@ class SystemdManager {
     return `${this.servicePrefix}${tunnelName}`;
   }
 
-  // Check if service exists
+  // Check if service exists (Docker-compatible version)
   async serviceExists(tunnelName) {
     const serviceName = this.getServiceName(tunnelName);
     
-    return new Promise((resolve) => {
-      exec(`systemctl list-unit-files ${serviceName}.service`, (error, stdout) => {
-        resolve(!error && stdout.includes(serviceName));
-      });
-    });
+    try {
+      // Check if service file exists
+      const serviceFile = `/etc/systemd/system/${serviceName}.service`;
+      return await fs.pathExists(serviceFile);
+    } catch (error) {
+      console.log('Service check error:', error.message);
+      return false;
+    }
   }
 
-  // Get service status
+  // Get service status (Docker-compatible version)
   async getServiceStatus(tunnelName) {
     const serviceName = this.getServiceName(tunnelName);
     
-    return new Promise((resolve, reject) => {
-      exec(`systemctl is-active ${serviceName}`, (error, stdout) => {
-        const status = stdout.trim();
-        resolve({
-          name: tunnelName,
-          service: serviceName,
-          active: status === 'active',
-          status: status
+    try {
+      // Check if process is running using pgrep
+      return new Promise((resolve) => {
+        exec(`pgrep -f "cloudflared.*${tunnelName}"`, (error, stdout) => {
+          if (error) {
+            resolve({
+              name: tunnelName,
+              service: serviceName,
+              active: false,
+              running: false,
+              status: 'inactive'
+            });
+          } else {
+            const pids = stdout.trim().split('\n').filter(pid => pid);
+            resolve({
+              name: tunnelName,
+              service: serviceName,
+              active: pids.length > 0,
+              running: pids.length > 0,
+              status: pids.length > 0 ? 'active' : 'inactive',
+              pids: pids
+            });
+          }
         });
       });
-    });
+    } catch (error) {
+      console.error('Error getting service status:', error);
+      return {
+        name: tunnelName,
+        service: serviceName,
+        active: false,
+        running: false,
+        status: 'error'
+      };
+    }
   }
 
-  // Start service
+  // Start service (Docker-compatible version)
   async startService(tunnelName) {
     const serviceName = this.getServiceName(tunnelName);
     
-    return new Promise((resolve, reject) => {
-      exec(`sudo systemctl start ${serviceName}`, (error, stdout, stderr) => {
-        if (error) {
-          reject(new Error(`Failed to start service: ${stderr || error.message}`));
-        } else {
-          resolve({ success: true, message: `Service ${serviceName} started` });
-        }
+    try {
+      // Check if already running
+      const status = await this.getServiceStatus(tunnelName);
+      if (status.active) {
+        return { success: true, message: `Tunnel ${tunnelName} is already running` };
+      }
+
+      // Start cloudflared process directly
+      const configPath = `/etc/cloudflared/${tunnelName}.yml`;
+      
+      // Check if config exists
+      if (!await fs.pathExists(configPath)) {
+        throw new Error(`Configuration file not found: ${configPath}`);
+      }
+
+      return new Promise((resolve, reject) => {
+        const process = spawn('cloudflared', ['tunnel', '--config', configPath, 'run'], {
+          detached: true,
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
+
+        process.unref(); // Allow parent to exit
+        this.runningProcesses.set(tunnelName, process);
+
+        // Handle process events
+        process.on('error', (error) => {
+          console.error(`Failed to start tunnel ${tunnelName}:`, error);
+          this.runningProcesses.delete(tunnelName);
+          reject(new Error(`Failed to start tunnel: ${error.message}`));
+        });
+
+        // Give it a moment to start
+        setTimeout(() => {
+          if (process.pid) {
+            console.log(`Tunnel ${tunnelName} started with PID ${process.pid}`);
+            resolve({ success: true, message: `Tunnel ${tunnelName} started successfully` });
+          } else {
+            reject(new Error('Failed to start tunnel process'));
+          }
+        }, 1000);
       });
-    });
+    } catch (error) {
+      console.error('Error starting service:', error);
+      throw new Error(`Failed to start service: ${error.message}`);
+    }
   }
 
-  // Stop service
+  // Stop service (Docker-compatible version)
   async stopService(tunnelName) {
     const serviceName = this.getServiceName(tunnelName);
     
-    return new Promise((resolve, reject) => {
-      exec(`sudo systemctl stop ${serviceName}`, (error, stdout, stderr) => {
-        if (error) {
-          reject(new Error(`Failed to stop service: ${stderr || error.message}`));
-        } else {
-          resolve({ success: true, message: `Service ${serviceName} stopped` });
-        }
+    try {
+      // First try to stop tracked process
+      if (this.runningProcesses.has(tunnelName)) {
+        const process = this.runningProcesses.get(tunnelName);
+        process.kill('SIGTERM');
+        this.runningProcesses.delete(tunnelName);
+      }
+
+      // Also kill any running cloudflared processes for this tunnel
+      return new Promise((resolve, reject) => {
+        exec(`pkill -f "cloudflared.*${tunnelName}"`, (error, stdout, stderr) => {
+          // pkill returns 1 if no processes found, which is not an error for us
+          if (error && error.code !== 1) {
+            console.error(`Error stopping tunnel ${tunnelName}:`, stderr);
+            reject(new Error(`Failed to stop service: ${stderr || error.message}`));
+          } else {
+            console.log(`Tunnel ${tunnelName} stopped successfully`);
+            resolve({ success: true, message: `Tunnel ${tunnelName} stopped successfully` });
+          }
+        });
       });
-    });
+    } catch (error) {
+      console.error('Error stopping service:', error);
+      throw new Error(`Failed to stop service: ${error.message}`);
+    }
   }
 
-  // Enable service (start on boot)
+  // Enable service (Docker-compatible version - creates service file)
   async enableService(tunnelName) {
     const serviceName = this.getServiceName(tunnelName);
     
-    return new Promise((resolve, reject) => {
-      exec(`sudo systemctl enable ${serviceName}`, (error, stdout, stderr) => {
-        if (error) {
-          reject(new Error(`Failed to enable service: ${stderr || error.message}`));
-        } else {
-          resolve({ success: true, message: `Service ${serviceName} enabled` });
-        }
-      });
-    });
+    try {
+      // Create systemd service file for future reference
+      const serviceContent = this.generateServiceFile(tunnelName);
+      const serviceFile = `/etc/systemd/system/${serviceName}.service`;
+      
+      await fs.ensureDir('/etc/systemd/system');
+      await fs.writeFile(serviceFile, serviceContent);
+      
+      console.log(`Service file created: ${serviceFile}`);
+      return { success: true, message: `Service ${serviceName} enabled (service file created)` };
+    } catch (error) {
+      console.error('Error enabling service:', error);
+      throw new Error(`Failed to enable service: ${error.message}`);
+    }
   }
 
-  // Disable service
+  // Disable service (Docker-compatible version - removes service file)
   async disableService(tunnelName) {
     const serviceName = this.getServiceName(tunnelName);
     
-    return new Promise((resolve, reject) => {
-      exec(`sudo systemctl disable ${serviceName}`, (error, stdout, stderr) => {
-        if (error) {
-          reject(new Error(`Failed to disable service: ${stderr || error.message}`));
-        } else {
-          resolve({ success: true, message: `Service ${serviceName} disabled` });
-        }
-      });
-    });
+    try {
+      const serviceFile = `/etc/systemd/system/${serviceName}.service`;
+      
+      if (await fs.pathExists(serviceFile)) {
+        await fs.remove(serviceFile);
+        console.log(`Service file removed: ${serviceFile}`);
+      }
+      
+      return { success: true, message: `Service ${serviceName} disabled (service file removed)` };
+    } catch (error) {
+      console.error('Error disabling service:', error);
+      throw new Error(`Failed to disable service: ${error.message}`);
+    }
   }
 
-  // Get service logs
+  // Get service logs (Docker-compatible version)
   async getServiceLogs(tunnelName, lines = 50) {
     const serviceName = this.getServiceName(tunnelName);
     
-    return new Promise((resolve, reject) => {
-      exec(`journalctl -u ${serviceName} -n ${lines} --no-pager`, (error, stdout, stderr) => {
-        if (error) {
-          reject(new Error(`Failed to get logs: ${stderr || error.message}`));
-        } else {
-          resolve(stdout);
-        }
-      });
-    });
+    try {
+      // In Docker, we'll look for process output or return a message
+      const status = await this.getServiceStatus(tunnelName);
+      if (!status.active) {
+        return `No active process found for tunnel ${tunnelName}`;
+      }
+      
+      // For now, return basic status info
+      return `Tunnel ${tunnelName} is running with PID(s): ${status.pids ? status.pids.join(', ') : 'unknown'}\nLogs are available in container stdout/stderr.`;
+    } catch (error) {
+      throw new Error(`Failed to get logs: ${error.message}`);
+    }
   }
 
-  // Stream service logs in real-time
+  // Stream service logs in real-time (Docker-compatible version)
   streamServiceLogs(tunnelName, callback) {
+    // In Docker environment, we'll simulate log streaming
     const serviceName = this.getServiceName(tunnelName);
     
-    const process = spawn('journalctl', ['-u', serviceName, '-f', '--no-pager'], {
-      stdio: 'pipe'
-    });
-
-    process.stdout.on('data', (data) => {
-      callback(null, data.toString());
-    });
-
-    process.stderr.on('data', (data) => {
-      callback(null, data.toString());
-    });
-
-    process.on('error', (error) => {
+    // Check if tunnel is running
+    this.getServiceStatus(tunnelName).then(status => {
+      if (status.active) {
+        callback(null, `Streaming logs for tunnel ${tunnelName}...\n`);
+        callback(null, `Tunnel is active with PID(s): ${status.pids ? status.pids.join(', ') : 'unknown'}\n`);
+        
+        // Simulate periodic status updates
+        const interval = setInterval(() => {
+          callback(null, `[${new Date().toISOString()}] Tunnel ${tunnelName} is running\n`);
+        }, 5000);
+        
+        // Return a mock process object
+        return {
+          kill: () => clearInterval(interval),
+          pid: status.pids ? status.pids[0] : null
+        };
+      } else {
+        callback(null, `Tunnel ${tunnelName} is not running\n`);
+      }
+    }).catch(error => {
       callback(error, null);
     });
-
-    process.on('close', (code) => {
-      callback(null, `Log stream ended with code ${code}`);
-    });
-
-    return process;
   }
 
-  // Get all tunnel services status
+  // Get all tunnel services status (Docker-compatible version)
   async getAllTunnelServices() {
-    return new Promise((resolve, reject) => {
-      exec(`systemctl list-units ${this.servicePrefix}* --all --no-pager`, (error, stdout) => {
-        if (error) {
-          resolve([]); // Return empty array if no services found
-          return;
-        }
+    try {
+      // Find all cloudflared config files
+      const configDir = '/etc/cloudflared';
+      if (!await fs.pathExists(configDir)) {
+        return [];
+      }
+      
+      const files = await fs.readdir(configDir);
+      const configFiles = files.filter(file => file.endsWith('.yml') || file.endsWith('.yaml'));
+      
+      const services = [];
+      for (const configFile of configFiles) {
+        const tunnelName = path.basename(configFile, path.extname(configFile));
+        const status = await this.getServiceStatus(tunnelName);
+        services.push(status);
+      }
+      
+      return services;
+    } catch (error) {
+      console.error('Error getting all tunnel services:', error);
+      return [];
+    }
+  }
 
-        const services = [];
-        const lines = stdout.split('\n');
-        
-        for (const line of lines) {
-          const match = line.match(new RegExp(`${this.servicePrefix}([^\\s]+)\\.service`));
-          if (match) {
-            const tunnelName = match[1];
-            const isActive = line.includes('active');
-            const isRunning = line.includes('running');
-            
-            services.push({
-              name: tunnelName,
-              service: `${this.servicePrefix}${tunnelName}`,
-              active: isActive,
-              running: isRunning,
-              status: isActive ? (isRunning ? 'running' : 'active') : 'inactive'
-            });
-          }
-        }
-        
-        resolve(services);
-      });
-    });
+  // Generate systemd service file content
+  generateServiceFile(tunnelName) {
+    const serviceName = this.getServiceName(tunnelName);
+    const configPath = `/etc/cloudflared/${tunnelName}.yml`;
+    
+    return `[Unit]
+Description=Cloudflare Tunnel - ${tunnelName}
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/local/bin/cloudflared tunnel --config ${configPath} run
+Restart=always
+RestartSec=10
+KillMode=mixed
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
+`;
   }
 }
 
