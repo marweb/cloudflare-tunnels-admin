@@ -15,6 +15,19 @@ const io = socketIo(server);
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Debug middleware for static files
+app.use((req, res, next) => {
+  if (req.url.startsWith('/css/') || req.url.startsWith('/js/')) {
+    console.log(`Static file request: ${req.url}`);
+    console.log(`Looking in: ${path.join(__dirname, 'public')}`);
+    console.log(`Full path: ${path.join(__dirname, 'public', req.url)}`);
+    console.log(`File exists: ${fs.existsSync(path.join(__dirname, 'public', req.url))}`);
+  }
+  next();
+});
+
+// Static files middleware
 app.use(express.static(path.join(__dirname, 'public')));
 
 // View engine setup
@@ -25,6 +38,27 @@ app.set('views', path.join(__dirname, 'views'));
 app.use((req, res, next) => {
   req.io = io;
   next();
+});
+
+// Explicit static file routes as fallback
+app.get('/css/:file', (req, res) => {
+  const filePath = path.join(__dirname, 'public', 'css', req.params.file);
+  console.log(`Explicit CSS route: ${filePath}`);
+  if (fs.existsSync(filePath)) {
+    res.sendFile(filePath);
+  } else {
+    res.status(404).send('CSS file not found');
+  }
+});
+
+app.get('/js/:file', (req, res) => {
+  const filePath = path.join(__dirname, 'public', 'js', req.params.file);
+  console.log(`Explicit JS route: ${filePath}`);
+  if (fs.existsSync(filePath)) {
+    res.sendFile(filePath);
+  } else {
+    res.status(404).send('JS file not found');
+  }
 });
 
 // Routes

@@ -35,6 +35,11 @@ RUN npm install --only=production
 # Copy application code
 COPY . .
 
+# Ensure public directory exists and has correct permissions
+RUN ls -la /app/public/ || echo "Public directory not found"
+RUN chmod -R 755 /app/public/
+RUN ls -la /app/public/
+
 # Make startup script executable
 RUN chmod +x docker-start.sh
 
