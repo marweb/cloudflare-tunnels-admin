@@ -168,42 +168,49 @@ class SystemdManager {
           console.log('🚀 Extracted tunnel UUID:', tunnelUuid);
           console.log('🚀 Starting cloudflared tunnel...');
           
-          // Use simple command that works reliably without nohup dependency
-          const command = `cloudflared tunnel --config ${configPath} run ${tunnelUuid} > /var/log/cloudflared-${tunnelName}.log 2>&1 &`;
-          console.log('🚀 Executing command:', command);
+          // Use spawn for better process management
+          const { spawn } = require('child_process');
+          const logFile = `/var/log/cloudflared-${tunnelName}.log`;
           
-          exec(command, (error, stdout, stderr) => {
-            console.log('🚀 Command stdout:', stdout);
-            console.log('🚀 Command stderr:', stderr);
-            
-            if (error) {
-              console.error('🚀 Failed to start tunnel:', error);
-              console.error('🚀 stderr:', stderr);
-              reject(new Error(`Failed to start tunnel: ${error.message}. stderr: ${stderr}`));
-              return;
-            }
-            
-            console.log('🚀 Command executed, checking if tunnel started...');
-            
-            // Wait and verify the process is running
-            setTimeout(async () => {
-              const stillRunning = await checkRunning();
-              if (stillRunning) {
-                console.log(`🚀 ✅ Tunnel ${tunnelName} started successfully and is running`);
-                resolve({ 
-                  success: true, 
-                  message: `Tunnel ${tunnelName} started successfully`
-                });
-              } else {
-                console.log('🚀 ❌ Tunnel process not found after start attempt');
-                // Check logs for error
-                exec(`tail -n 10 /var/log/cloudflared-${tunnelName}.log`, (logError, logOutput) => {
-                  console.log('🚀 Recent logs:', logOutput || 'No logs found');
-                  reject(new Error(`Tunnel failed to start. Logs: ${logOutput || 'No logs available'}`));
-                });
-              }
-            }, 3000);
+          console.log('🚀 Spawning cloudflared process...');
+          console.log('🚀 Command: cloudflared tunnel --config', configPath, 'run', tunnelUuid);
+          console.log('🚀 Log file:', logFile);
+          
+          // Create log file stream
+          const logStream = require('fs').createWriteStream(logFile, { flags: 'a' });
+          
+          // Spawn the process
+          const tunnelProcess = spawn('cloudflared', [
+            'tunnel',
+            '--config', configPath,
+            'run', tunnelUuid
+          ], {
+            detached: true,
+            stdio: ['ignore', logStream, logStream]
           });
+          
+          // Detach the process so it continues running
+          tunnelProcess.unref();
+          
+          // Wait a moment for the process to start
+          setTimeout(async () => {
+            console.log('🚀 Checking if tunnel started...');
+            const stillRunning = await checkRunning();
+            if (stillRunning) {
+              console.log(`🚀 ✅ Tunnel ${tunnelName} started successfully and is running`);
+              resolve({ 
+                success: true, 
+                message: `Tunnel ${tunnelName} started successfully`
+              });
+            } else {
+              console.log('🚀 ❌ Tunnel process not found after start attempt');
+              // Check logs for error
+              exec(`tail -n 10 ${logFile}`, (logError, logOutput) => {
+                console.log('🚀 Recent logs:', logOutput || 'No logs found');
+                reject(new Error(`Tunnel failed to start. Logs: ${logOutput || 'No logs available'}`));
+              });
+            }
+          }, 3000);
         });
       });
     } catch (error) {
