@@ -170,14 +170,15 @@ class SystemdManager {
           
           // Use spawn for better process management
           const { spawn } = require('child_process');
+          const fs = require('fs');
           const logFile = `/var/log/cloudflared-${tunnelName}.log`;
           
           console.log('🚀 Spawning cloudflared process...');
           console.log('🚀 Command: cloudflared tunnel --config', configPath, 'run', tunnelUuid);
           console.log('🚀 Log file:', logFile);
           
-          // Create log file stream
-          const logStream = require('fs').createWriteStream(logFile, { flags: 'a' });
+          // Open log file for writing
+          const logFd = fs.openSync(logFile, 'a');
           
           // Spawn the process
           const tunnelProcess = spawn('cloudflared', [
@@ -186,11 +187,14 @@ class SystemdManager {
             'run', tunnelUuid
           ], {
             detached: true,
-            stdio: ['ignore', logStream, logStream]
+            stdio: ['ignore', logFd, logFd]
           });
           
           // Detach the process so it continues running
           tunnelProcess.unref();
+          
+          // Close the file descriptor after spawning
+          fs.closeSync(logFd);
           
           // Wait a moment for the process to start
           setTimeout(async () => {
