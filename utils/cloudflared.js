@@ -271,6 +271,35 @@ class CloudflaredManager {
     });
   }
 
+  // Create DNS route for tunnel
+  async createDNSRoute(tunnelName, hostname) {
+    return new Promise((resolve, reject) => {
+      console.log(`🌐 Creating DNS route for tunnel ${tunnelName} -> ${hostname}`);
+      
+      const process = this.executeCommand(['tunnel', 'route', 'dns', tunnelName, hostname]);
+      let output = '';
+      let error = '';
+
+      process.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+
+      process.stderr.on('data', (data) => {
+        error += data.toString();
+      });
+
+      process.on('close', (code) => {
+        if (code === 0) {
+          console.log(`🌐 DNS route created successfully: ${hostname} -> ${tunnelName}`);
+          resolve({ success: true, output });
+        } else {
+          console.error(`🌐 Failed to create DNS route: ${error}`);
+          reject(new Error(error || 'Failed to create DNS route'));
+        }
+      });
+    });
+  }
+
   // Delete a tunnel
   async deleteTunnel(name) {
     return new Promise((resolve, reject) => {

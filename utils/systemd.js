@@ -80,45 +80,78 @@ class SystemdManager {
 
   // Start service (Docker-compatible version)
   async startService(tunnelName) {
+    console.log('🟢 startService method called!');
+    console.log('🟢 Tunnel name to start:', tunnelName);
+    
     const serviceName = this.getServiceName(tunnelName);
     
     try {
       // Check if already running
+      console.log('🟢 Checking if tunnel is already running...');
       const status = await this.getServiceStatus(tunnelName);
+      console.log('🟢 Current tunnel status:', status);
+      
       if (status.active) {
+        console.log('🟢 Tunnel is already running, skipping start');
         return { success: true, message: `Tunnel ${tunnelName} is already running` };
       }
 
       // Start cloudflared process directly
       const configPath = `/etc/cloudflared/${tunnelName}.yml`;
+      console.log('🟢 Config path:', configPath);
       
       // Check if config exists
-      if (!await fs.pathExists(configPath)) {
+      const configExists = await fs.pathExists(configPath);
+      console.log('🟢 Config file exists:', configExists);
+      
+      if (!configExists) {
+        console.log('🟢 ERROR: Configuration file not found!');
         throw new Error(`Configuration file not found: ${configPath}`);
       }
 
+      console.log('🟢 Starting cloudflared process...');
+      const spawnArgs = ['tunnel', '--config', configPath, 'run'];
+      console.log('🟢 Spawn command: cloudflared', spawnArgs);
+      
       return new Promise((resolve, reject) => {
-        const process = spawn('cloudflared', ['tunnel', '--config', configPath, 'run'], {
+        const process = spawn('cloudflared', spawnArgs, {
           detached: true,
           stdio: ['ignore', 'pipe', 'pipe']
         });
 
+        console.log('🟢 Process spawned, PID:', process.pid);
         process.unref(); // Allow parent to exit
         this.runningProcesses.set(tunnelName, process);
 
         // Handle process events
         process.on('error', (error) => {
-          console.error(`Failed to start tunnel ${tunnelName}:`, error);
+          console.error('🟢 Process error:', error);
+          console.error(`🟢 Failed to start tunnel ${tunnelName}:`, error);
           this.runningProcesses.delete(tunnelName);
           reject(new Error(`Failed to start tunnel: ${error.message}`));
+        });
+        
+        process.on('exit', (code, signal) => {
+          console.log('🟢 Process exited with code:', code, 'signal:', signal);
+        });
+        
+        // Capture stdout and stderr for debugging
+        process.stdout.on('data', (data) => {
+          console.log('🟢 Process stdout:', data.toString());
+        });
+        
+        process.stderr.on('data', (data) => {
+          console.log('🟢 Process stderr:', data.toString());
         });
 
         // Give it a moment to start
         setTimeout(() => {
+          console.log('🟢 Checking process after 1 second, PID:', process.pid);
           if (process.pid) {
-            console.log(`Tunnel ${tunnelName} started with PID ${process.pid}`);
+            console.log(`🟢 Tunnel ${tunnelName} started with PID ${process.pid}`);
             resolve({ success: true, message: `Tunnel ${tunnelName} started successfully` });
           } else {
+            console.log('🟢 ERROR: No PID found after spawn');
             reject(new Error('Failed to start tunnel process'));
           }
         }, 1000);

@@ -19,6 +19,8 @@ services:
       # Mount systemctl for service management
       - /bin/systemctl:/bin/systemctl:ro
       - /usr/bin/systemctl:/usr/bin/systemctl:ro
+      # Persist Cloudflare credentials between deployments
+      - cloudflared_credentials:/root/.cloudflared:rw
     privileged: true
     network_mode: host
     restart: unless-stopped
@@ -42,5 +44,8 @@ services:
   #     - redis_data:/data
   #   command: redis-server --appendonly yes
 
-# volumes:
-#   redis_data:
+volumes:
+  # Persistent volume for Cloudflare credentials
+  cloudflared_credentials:
+  # Optional: Redis data (if you want to add sessions later)
+  # redis_data:

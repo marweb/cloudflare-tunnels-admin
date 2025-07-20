@@ -108,9 +108,15 @@ class TunnelController {
       await this.cloudflared.ensureInstalled();
 
       // Create the tunnel
+      console.log(`🚇 Creating tunnel: ${name}`);
       await this.cloudflared.createTunnel(name);
 
+      // Create DNS route for the tunnel
+      console.log(`🌐 Creating DNS route: ${hostname} -> ${name}`);
+      await this.cloudflared.createDNSRoute(name, hostname);
+
       // Generate and write config
+      console.log(`📝 Generating config for tunnel: ${name}`);
       const configContent = this.config.generateConfig(name, hostname, portNum, fallback);
       await this.config.writeConfig(name, configContent);
 
