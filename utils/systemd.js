@@ -145,9 +145,9 @@ class SystemdManager {
       console.log('🚀 Starting cloudflared tunnel...');
       
       return new Promise((resolve, reject) => {
-        // Use the correct cloudflared command: cloudflared tunnel run <tunnel-name>
-        const command = `nohup cloudflared tunnel --config ${configPath} run ${tunnelName} > /var/log/cloudflared-${tunnelName}.log 2>&1 & echo $!`;
-        console.log('🚀 Executing command:', command);
+        // Use robust daemon process with setsid and disown for true persistence
+        const command = `setsid cloudflared tunnel --config ${configPath} run ${tunnelName} > /var/log/cloudflared-${tunnelName}.log 2>&1 < /dev/null & echo $! && disown`;
+        console.log('🚀 Executing robust daemon command:', command);
         
         exec(command, (error, stdout, stderr) => {
           if (error) {

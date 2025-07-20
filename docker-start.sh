@@ -44,9 +44,11 @@ if [ -d "/etc/cloudflared" ]; then
                 credentials_file=$(grep "^credentials-file:" "$config_file" | awk '{print $2}')
                 
                 if [ -n "$tunnel_uuid" ] && [ -f "$credentials_file" ]; then
-                    # Start tunnel in background
-                    nohup cloudflared tunnel --config "$config_file" run "$tunnel_uuid" > "/var/log/cloudflared-${tunnel_name}.log" 2>&1 &
-                    echo "✅ Started tunnel $tunnel_name with UUID $tunnel_uuid"
+                    # Start tunnel as true daemon process
+                    setsid cloudflared tunnel --config "$config_file" run "$tunnel_uuid" > "/var/log/cloudflared-${tunnel_name}.log" 2>&1 < /dev/null &
+                    tunnel_pid=$!
+                    disown $tunnel_pid  # Completely detach from shell
+                    echo "✅ Started tunnel $tunnel_name with UUID $tunnel_uuid (PID: $tunnel_pid)"
                 else
                     echo "⚠️  Skipping tunnel $tunnel_name - missing UUID or credentials file"
                 fi
