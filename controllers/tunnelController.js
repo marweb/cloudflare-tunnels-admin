@@ -107,17 +107,24 @@ class TunnelController {
       // Ensure cloudflared is installed
       await this.cloudflared.ensureInstalled();
 
-      // Create the tunnel
+      // Create the tunnel and capture UUID
       console.log(`🚇 Creating tunnel: ${name}`);
-      await this.cloudflared.createTunnel(name);
+      const tunnelResult = await this.cloudflared.createTunnel(name);
+      
+      if (!tunnelResult.success || !tunnelResult.uuid) {
+        throw new Error('Failed to create tunnel or extract UUID');
+      }
+      
+      const tunnelUuid = tunnelResult.uuid;
+      console.log(`🚇 Tunnel created with UUID: ${tunnelUuid}`);
 
       // Create DNS route for the tunnel
       console.log(`🌐 Creating DNS route: ${hostname} -> ${name}`);
       await this.cloudflared.createDNSRoute(name, hostname);
 
-      // Generate and write config
-      console.log(`📝 Generating config for tunnel: ${name}`);
-      const configContent = this.config.generateConfig(name, hostname, portNum, fallback);
+      // Generate and write config with UUID
+      console.log(`📝 Generating config for tunnel: ${name} (UUID: ${tunnelUuid})`);
+      const configContent = this.config.generateConfig(name, hostname, portNum, tunnelUuid, fallback);
       await this.config.writeConfig(name, configContent);
 
       // Create systemd service

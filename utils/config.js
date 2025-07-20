@@ -23,10 +23,20 @@ class ConfigManager {
   }
 
   // Generate config.yml for a tunnel
-  generateConfig(tunnelName, hostname, port, fallback = null) {
+  generateConfig(tunnelName, hostname, port, tunnelUuid = null, fallback = null) {
+    // Use UUID if provided, otherwise fall back to name (for backwards compatibility)
+    const tunnelId = tunnelUuid || tunnelName;
+    const credentialsPath = tunnelUuid 
+      ? `/home/appuser/.cloudflared/${tunnelUuid}.json`  // Use UUID-based path
+      : `/etc/cloudflared/${tunnelName}.json`;           // Fallback to name-based path
+  
+    console.log(`📝 Generating config for tunnel: ${tunnelName}`);
+    console.log(`📝 Tunnel ID (UUID): ${tunnelId}`);
+    console.log(`📝 Credentials file: ${credentialsPath}`);
+  
     const config = {
-      tunnel: tunnelName,
-      'credentials-file': `/etc/cloudflared/${tunnelName}.json`,
+      tunnel: tunnelId,  // Use UUID instead of name
+      'credentials-file': credentialsPath,
       ingress: [
         {
           hostname: hostname,
@@ -46,7 +56,11 @@ class ConfigManager {
       });
     }
 
-    return yaml.stringify(config);
+    const yamlConfig = yaml.stringify(config);
+    console.log(`📝 Generated YAML config:`);
+    console.log(yamlConfig);
+  
+    return yamlConfig;
   }
 
   // Write config file

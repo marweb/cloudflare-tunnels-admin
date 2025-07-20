@@ -249,6 +249,7 @@ class CloudflaredManager {
         return;
       }
 
+      console.log(`🚇 Creating tunnel: ${name}`);
       const process = this.executeCommand(['tunnel', 'create', name]);
       let output = '';
       let error = '';
@@ -263,8 +264,29 @@ class CloudflaredManager {
 
       process.on('close', (code) => {
         if (code === 0) {
-          resolve({ success: true, output });
+          console.log(`🚇 Tunnel creation output:`, output);
+          
+          // Extract tunnel UUID from output
+          // Output format: "Created tunnel <name> with id <UUID>"
+          const uuidMatch = output.match(/with id ([a-f0-9-]{36})/i);
+          const tunnelUuid = uuidMatch ? uuidMatch[1] : null;
+          
+          if (!tunnelUuid) {
+            console.error(`🚇 Could not extract tunnel UUID from output:`, output);
+            reject(new Error('Failed to extract tunnel UUID from cloudflared output'));
+            return;
+          }
+          
+          console.log(`🚇 Tunnel created successfully - Name: ${name}, UUID: ${tunnelUuid}`);
+          resolve({ 
+            success: true, 
+            output,
+            name: name,
+            uuid: tunnelUuid,
+            credentialsFile: `/home/appuser/.cloudflared/${tunnelUuid}.json`
+          });
         } else {
+          console.error(`🚇 Failed to create tunnel:`, error);
           reject(new Error(error || 'Failed to create tunnel'));
         }
       });
