@@ -116,20 +116,30 @@ WantedBy=multi-user.target`;
     });
   }
 
-  // Remove config and service files
+  // Remove config and service files (Docker-compatible version)
   async removeFiles(tunnelName) {
     const configPath = path.join(this.configDir, `${tunnelName}.yml`);
     const servicePath = path.join(this.systemdDir, `cloudflared-${tunnelName}.service`);
     
-    return new Promise((resolve, reject) => {
-      exec(`sudo rm -f "${configPath}" "${servicePath}" && sudo systemctl daemon-reload`, (error) => {
-        if (error) {
-          reject(error);
-        } else {
-          resolve();
-        }
-      });
-    });
+    try {
+      // Remove config file if it exists
+      if (await fs.pathExists(configPath)) {
+        await fs.remove(configPath);
+        console.log(`Removed config file: ${configPath}`);
+      }
+      
+      // Remove service file if it exists
+      if (await fs.pathExists(servicePath)) {
+        await fs.remove(servicePath);
+        console.log(`Removed service file: ${servicePath}`);
+      }
+      
+      console.log(`Successfully removed files for tunnel: ${tunnelName}`);
+      return true;
+    } catch (error) {
+      console.error(`Error removing files for tunnel ${tunnelName}:`, error);
+      throw error;
+    }
   }
 
   // Check if config exists
