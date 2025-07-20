@@ -1,0 +1,65 @@
+version: '3.8'
+
+# Example: Container-aware mode for managing tunnels to other containers
+services:
+  # Main tunnel admin panel
+  cloudflare-tunnel-admin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cloudflare-tunnel-admin
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - CONTAINER_MODE=true
+      - DOCKER_NETWORK=tunnel-network
+    volumes:
+      # Still mount host directories for tunnel persistence
+      - /etc/cloudflared:/etc/cloudflared:rw
+      - /etc/systemd/system:/etc/systemd/system:rw
+      - /var/log:/var/log:rw
+      # Mount Docker socket to discover other containers
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    privileged: true
+    networks:
+      - tunnel-network
+    restart: unless-stopped
+
+  # Example web application to tunnel to
+  example-webapp:
+    image: nginx:alpine
+    container_name: example-webapp
+    ports:
+      - "8080:80"
+    volumes:
+      - ./example-content:/usr/share/nginx/html:ro
+    networks:
+      - tunnel-network
+    labels:
+      - "tunnel.enable=true"
+      - "tunnel.hostname=webapp.example.com"
+      - "tunnel.port=80"
+
+  # Another example service
+  example-api:
+    image: node:18-alpine
+    container_name: example-api
+    ports:
+      - "3001:3000"
+    working_dir: /app
+    command: ["node", "-e", "require('http').createServer((req,res)=>res.end('API Response')).listen(3000)"]
+    networks:
+      - tunnel-network
+    labels:
+      - "tunnel.enable=true"
+      - "tunnel.hostname=api.example.com"
+      - "tunnel.port=3000"
+
+networks:
+  tunnel-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  cloudflare-tunnel-admin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cloudflare-tunnel-admin
+    ports:
+      - "3333:3333"
+    environment:
+      - NODE_ENV=production
+      - PORT=3333
+    volumes:
+      # Mount host systemd and cloudflared directories for tunnel management
+      - /etc/cloudflared:/etc/cloudflared:rw
+      - /etc/systemd/system:/etc/systemd/system:rw
+      - /var/log:/var/log:rw
+      # Mount Docker socket for container management (if needed)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Mount systemctl for service management
+      - /bin/systemctl:/bin/systemctl:ro
+      - /usr/bin/systemctl:/usr/bin/systemctl:ro
+    privileged: true
+    network_mode: host
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3333/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.tunnel-admin.rule=Host(`tunnel-admin.localhost`)"
+      - "traefik.http.services.tunnel-admin.loadbalancer.server.port=3333"
+
+  # Optional: Redis for session storage (if you want to add sessions later)
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: tunnel-admin-redis
+  #   restart: unless-stopped
+  #   volumes:
+  #     - redis_data:/data
+  #   command: redis-server --appendonly yes
+
+# volumes:
+#   redis_data:

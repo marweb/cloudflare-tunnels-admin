@@ -1,0 +1,25 @@
+{
+  "name": "cloudflare-tunnel-admin",
+  "version": "1.0.0",
+  "description": "Web panel for managing Cloudflare tunnels on Ubuntu Linux",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js"
+  },
+  "keywords": ["cloudflare", "tunnel", "admin", "web", "panel"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "ejs": "^3.1.9",
+    "socket.io": "^4.7.2",
+    "yaml": "^2.3.2",
+    "fs-extra": "^11.1.1",
+    "axios": "^1.5.0",
+    "tar": "^6.1.15"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}

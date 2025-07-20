@@ -1,0 +1,200 @@
+<%- include('partials/header', { title: title }) %>
+
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h3">
+                <i class="bi bi-speedometer2"></i>
+                Dashboard
+            </h1>
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createTunnelModal">
+                <i class="bi bi-plus-circle"></i>
+                Create Tunnel
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Alert Messages -->
+<div id="alertContainer"></div>
+
+<!-- Cloudflared Status -->
+<% if (!cloudflaredInstalled) { %>
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="alert alert-warning" role="alert">
+            <h4 class="alert-heading">
+                <i class="bi bi-exclamation-triangle"></i>
+                Cloudflared Not Installed
+            </h4>
+            <p>Cloudflared is not installed on this system. You need to install it before creating tunnels.</p>
+            <button type="button" class="btn btn-warning" onclick="installCloudflared()">
+                <i class="bi bi-download"></i>
+                Install Cloudflared
+            </button>
+        </div>
+    </div>
+</div>
+<% } %>
+
+<!-- Tunnels Grid -->
+<div class="row">
+    <% if (tunnels && tunnels.length > 0) { %>
+        <% tunnels.forEach(tunnel => { %>
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card tunnel-card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-cloud-arrow-up"></i>
+                        <%= tunnel.name %>
+                    </h5>
+                    <span class="badge <%= tunnel.active ? 'bg-success' : 'bg-secondary' %>">
+                        <%= tunnel.active ? 'Active' : 'Inactive' %>
+                    </span>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">
+                        <small class="text-muted">
+                            <i class="bi bi-calendar"></i>
+                            Created: <%= tunnel.created %>
+                        </small>
+                    </p>
+                    <p class="card-text">
+                        <small class="text-muted">
+                            <i class="bi bi-hash"></i>
+                            ID: <%= tunnel.id %>
+                        </small>
+                    </p>
+                    <div class="btn-group w-100" role="group">
+                        <% if (tunnel.active) { %>
+                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="stopTunnel('<%= tunnel.name %>')">
+                            <i class="bi bi-stop-circle"></i>
+                            Stop
+                        </button>
+                        <% } else { %>
+                        <button type="button" class="btn btn-outline-success btn-sm" onclick="startTunnel('<%= tunnel.name %>')">
+                            <i class="bi bi-play-circle"></i>
+                            Start
+                        </button>
+                        <% } %>
+                        <button type="button" class="btn btn-outline-info btn-sm" onclick="viewLogs('<%= tunnel.name %>')">
+                            <i class="bi bi-file-text"></i>
+                            Logs
+                        </button>
+                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteTunnel('<%= tunnel.name %>')">
+                            <i class="bi bi-trash"></i>
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <% }) %>
+    <% } else { %>
+        <div class="col-12">
+            <div class="text-center py-5">
+                <i class="bi bi-cloud-slash display-1 text-muted"></i>
+                <h3 class="mt-3 text-muted">No Tunnels Found</h3>
+                <p class="text-muted">Create your first Cloudflare tunnel to get started.</p>
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createTunnelModal">
+                    <i class="bi bi-plus-circle"></i>
+                    Create Your First Tunnel
+                </button>
+            </div>
+        </div>
+    <% } %>
+</div>
+
+<!-- Docker Containers Section -->
+<div class="row mt-5">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="h4">
+                <i class="bi bi-box"></i>
+                Docker Containers
+                <small class="text-muted">(Auto-tunnel Creation)</small>
+            </h2>
+            <button type="button" class="btn btn-outline-primary" onclick="refreshContainers()">
+                <i class="bi bi-arrow-clockwise"></i>
+                Refresh
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="row" id="containersGrid">
+    <!-- Containers will be loaded here -->
+</div>
+
+<!-- Create Tunnel Modal -->
+<div class="modal fade" id="createTunnelModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-plus-circle"></i>
+                    Create New Tunnel
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="createTunnelForm">
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="tunnelName" class="form-label">Tunnel Name *</label>
+                        <input type="text" class="form-control" id="tunnelName" name="name" required 
+                               pattern="[a-zA-Z0-9-_]+" 
+                               title="Only letters, numbers, hyphens, and underscores allowed">
+                        <div class="form-text">Only letters, numbers, hyphens, and underscores allowed.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="hostname" class="form-label">Hostname *</label>
+                        <input type="text" class="form-control" id="hostname" name="hostname" required
+                               placeholder="example.yourdomain.com">
+                        <div class="form-text">The domain that will point to your tunnel.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="port" class="form-label">Local Port *</label>
+                        <input type="number" class="form-control" id="port" name="port" required
+                               min="1" max="65535" placeholder="8080">
+                        <div class="form-text">The local port your service is running on.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="fallback" class="form-label">Fallback Service (Optional)</label>
+                        <input type="text" class="form-control" id="fallback" name="fallback"
+                               placeholder="http://localhost:80">
+                        <div class="form-text">Fallback service when main service is unavailable.</div>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="autoStart" name="autoStart">
+                        <label class="form-check-label" for="autoStart">
+                            Start tunnel automatically after creation
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-plus-circle"></i>
+                        Create Tunnel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Loading Modal -->
+<div class="modal fade" id="loadingModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-body text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-3 mb-0" id="loadingText">Processing...</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<%- include('partials/footer') %>

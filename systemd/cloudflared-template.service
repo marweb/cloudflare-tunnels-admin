@@ -1,0 +1,16 @@
+[Unit]
+Description=Cloudflare Tunnel - {{TUNNEL_NAME}}
+After=network.target
+
+[Service]
+Type=notify
+User=root
+ExecStart=/usr/local/bin/cloudflared tunnel --config /etc/cloudflared/{{TUNNEL_NAME}}.yml run
+Restart=on-failure
+RestartSec=5s
+KillMode=mixed
+KillSignal=SIGINT
+TimeoutStopSec=30s
+
+[Install]
+WantedBy=multi-user.target
