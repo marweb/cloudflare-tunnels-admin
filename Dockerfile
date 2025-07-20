@@ -17,6 +17,10 @@ RUN apt-get update && apt-get install -y \
     gnupg \
     lsb-release \
     procps \
+    build-essential \
+    python3 \
+    make \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js
@@ -30,7 +34,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production
+RUN npm install --only=production
 
 # Copy application code
 COPY . .
