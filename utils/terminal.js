@@ -17,17 +17,20 @@ class WebTerminal {
     }
 
     try {
-      // Use bash with interactive mode
-      this.shell = spawn('/bin/bash', ['-i'], {
+      console.log('Starting terminal shell...');
+      
+      // Use bash without -i flag for better Docker compatibility
+      this.shell = spawn('/bin/bash', [], {
         stdio: 'pipe',
         env: {
           ...process.env,
           TERM: 'xterm-256color',
           COLORTERM: 'truecolor',
-          PS1: '\\[\\033[01;32m\\]cloudflared-admin\\[\\033[00m\\]:\\[\\033[01;34m\\]\\w\\[\\033[00m\\]\\$ ',
+          PS1: 'cloudflared-admin:/app# ',
           HOME: '/root',
           USER: 'root',
-          SHELL: '/bin/bash'
+          SHELL: '/bin/bash',
+          PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'
         },
         cwd: '/app'
       });
@@ -36,11 +39,22 @@ class WebTerminal {
 
       // Handle shell output
       this.shell.stdout.on('data', (data) => {
-        this.socket.emit('terminal-output', { data: data.toString() });
+        const output = data.toString();
+        console.log('Shell stdout:', JSON.stringify(output));
+        this.socket.emit('terminal-output', { data: output });
+        
+        // If output doesn't end with a prompt, add one
+        if (!output.includes('#') && !output.includes('$')) {
+          setTimeout(() => {
+            this.socket.emit('terminal-output', { data: 'cloudflared-admin:/app# ' });
+          }, 100);
+        }
       });
 
       this.shell.stderr.on('data', (data) => {
-        this.socket.emit('terminal-output', { data: data.toString() });
+        const output = data.toString();
+        console.log('Shell stderr:', JSON.stringify(output));
+        this.socket.emit('terminal-output', { data: output });
       });
 
       // Handle shell exit
@@ -54,15 +68,20 @@ class WebTerminal {
         this.socket.emit('terminal-error', { error: error.message });
       });
 
-      // Send initial welcome and prompt
+      // Send initial welcome and prompt immediately
+      this.socket.emit('terminal-ready', { 
+        message: '\r\n🚀 Cloudflare Tunnel Admin Terminal\r\n' +
+                '📁 Current directory: /app\r\n' +
+                '💡 Type "cloudflared tunnel login" to authenticate\r\n' +
+                '\r\ncloudflared-admin:/app# '
+      });
+      
+      // Also send a newline to the shell to trigger initial prompt
       setTimeout(() => {
-        this.socket.emit('terminal-ready', { 
-          message: '\r\n🚀 Cloudflare Tunnel Admin Terminal\r\n' +
-                  '📁 Current directory: /app\r\n' +
-                  '💡 Type "cloudflared tunnel login" to authenticate\r\n' +
-                  '\r\nroot@cloudflared-admin:/app# '
-        });
-      }, 500);
+        if (this.shell && this.shell.stdin) {
+          this.shell.stdin.write('\n');
+        }
+      }, 100);
 
     } catch (error) {
       this.socket.emit('terminal-error', { error: error.message });
@@ -77,21 +96,29 @@ class WebTerminal {
     }
 
     try {
+      console.log('Terminal input received:', JSON.stringify(data));
+      
       // Handle special keys
       if (data === '\r') {
-        // Enter key - add newline and execute command
+        // Enter key - execute command and show new prompt
         this.shell.stdin.write('\n');
+        // Echo the enter to terminal
+        this.socket.emit('terminal-output', { data: '\r\n' });
       } else if (data === '\u007f' || data === '\b') {
         // Backspace - send backspace sequence
         this.shell.stdin.write('\b');
+        this.socket.emit('terminal-output', { data: '\b \b' });
       } else if (data === '\u0003') {
         // Ctrl+C - send interrupt signal
         this.shell.stdin.write('\u0003');
+        this.socket.emit('terminal-output', { data: '^C\r\ncloudflared-admin:/app# ' });
       } else {
-        // Regular character input
+        // Regular character input - echo to terminal and send to shell
+        this.socket.emit('terminal-output', { data: data });
         this.shell.stdin.write(data);
       }
     } catch (error) {
+      console.error('Terminal input error:', error);
       this.socket.emit('terminal-error', { error: error.message });
     }
   }
