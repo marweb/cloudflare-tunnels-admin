@@ -116,6 +116,9 @@
 
 <script>
 // Terminal specific JavaScript
+console.log('Terminal script loading...');
+
+// Terminal-specific variables
 let terminal = null;
 let fitAddon = null;
 let terminalSocket = null;
@@ -331,23 +334,14 @@ function clearTerminal() {
     }
 }
 
-function updateButtons(connected) {
-    const startButton = document.getElementById('startButton');
-    const stopButton = document.getElementById('stopButton');
-    const authButton = document.getElementById('authButton');
-    const clearButton = document.getElementById('clearButton');
-    
-    if (startButton) startButton.disabled = connected;
-    if (stopButton) stopButton.disabled = !connected;
-    if (authButton) authButton.disabled = !connected;
-    if (clearButton) clearButton.disabled = !connected;
-}
-
 function updateConnectionStatus(status) {
     const statusElement = document.getElementById('connectionStatus');
     const statusText = document.getElementById('statusText');
     
-    if (!statusElement || !statusText) return;
+    if (!statusElement || !statusText) {
+        console.log('Status elements not found:', { statusElement, statusText });
+        return;
+    }
 
     statusElement.style.display = 'block';
     statusElement.className = 'alert';
@@ -372,15 +366,23 @@ function updateButtons(connected) {
     const startButton = document.getElementById('startButton');
     const stopButton = document.getElementById('stopButton');
     const authButton = document.getElementById('authButton');
-
-    if (connected) {
-        startButton.style.display = 'none';
-        stopButton.style.display = 'inline-block';
-        authButton.disabled = false;
-    } else {
-        startButton.style.display = 'inline-block';
-        stopButton.style.display = 'none';
-        authButton.disabled = true;
+    const clearButton = document.getElementById('clearButton');
+    
+    console.log('Updating buttons, connected:', connected);
+    
+    if (startButton) {
+        startButton.disabled = connected;
+        startButton.style.display = connected ? 'none' : 'inline-block';
+    }
+    if (stopButton) {
+        stopButton.disabled = !connected;
+        stopButton.style.display = connected ? 'inline-block' : 'none';
+    }
+    if (authButton) {
+        authButton.disabled = !connected;
+    }
+    if (clearButton) {
+        clearButton.disabled = !connected;
     }
 }
 </script>

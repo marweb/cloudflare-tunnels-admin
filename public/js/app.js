@@ -10,7 +10,30 @@ let logLineCount = 0;
 // DOM elements
 const alertContainer = document.getElementById('alertContainer');
 const createTunnelForm = document.getElementById('createTunnelForm');
-const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
+
+// Initialize Bootstrap Modal only if element exists
+let loadingModal = null;
+const loadingModalElement = document.getElementById('loadingModal');
+if (loadingModalElement) {
+    loadingModal = new bootstrap.Modal(loadingModalElement);
+}
+
+// Helper functions for safe modal operations
+function showLoadingModal(text) {
+    const loadingText = document.getElementById('loadingText');
+    if (loadingText && text) {
+        loadingText.textContent = text;
+    }
+    if (loadingModal) {
+        loadingModal.show();
+    }
+}
+
+function hideLoadingModal() {
+    if (loadingModal) {
+        loadingModal.hide();
+    }
+}
 
 // Initialize app when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
@@ -114,8 +137,7 @@ async function handleCreateTunnel(event) {
     }
 
     // Show loading modal
-    document.getElementById('loadingText').textContent = 'Creating tunnel...';
-    loadingModal.show();
+    showLoadingModal('Creating tunnel...');
 
     try {
         const response = await fetch('/api/tunnels', {
@@ -131,8 +153,13 @@ async function handleCreateTunnel(event) {
         if (result.success) {
             showAlert('success', result.message);
             // Close modal and reset form
-            const modal = bootstrap.Modal.getInstance(document.getElementById('createTunnelModal'));
-            modal.hide();
+            const createTunnelModalElement = document.getElementById('createTunnelModal');
+            if (createTunnelModalElement) {
+                const modal = bootstrap.Modal.getInstance(createTunnelModalElement);
+                if (modal) {
+                    modal.hide();
+                }
+            }
             createTunnelForm.reset();
             // Reload page to show new tunnel
             setTimeout(() => window.location.reload(), 1000);
@@ -143,14 +170,13 @@ async function handleCreateTunnel(event) {
         console.error('Error creating tunnel:', error);
         showAlert('danger', 'Failed to create tunnel: ' + error.message);
     } finally {
-        loadingModal.hide();
+        hideLoadingModal();
     }
 }
 
 // Start tunnel
 async function startTunnel(name) {
-    document.getElementById('loadingText').textContent = `Starting tunnel ${name}...`;
-    loadingModal.show();
+    showLoadingModal(`Starting tunnel ${name}...`);
 
     try {
         const response = await fetch(`/api/tunnels/${name}/start`, {
@@ -169,14 +195,19 @@ async function startTunnel(name) {
         console.error('Error starting tunnel:', error);
         showAlert('danger', 'Failed to start tunnel: ' + error.message);
     } finally {
-        loadingModal.hide();
+        hideLoadingModal();
     }
 }
 
 // Stop tunnel
 async function stopTunnel(name) {
-    document.getElementById('loadingText').textContent = `Stopping tunnel ${name}...`;
-    loadingModal.show();
+    const loadingText = document.getElementById('loadingText');
+    if (loadingText) {
+        loadingText.textContent = `Stopping tunnel ${name}...`;
+    }
+    if (loadingModal) {
+        loadingModal.show();
+    }
 
     try {
         const response = await fetch(`/api/tunnels/${name}/stop`, {
