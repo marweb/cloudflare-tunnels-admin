@@ -75,7 +75,7 @@ router.use((req, res, next) => {
 
       socket.on('terminal-input', (data) => {
         if (terminal) {
-          terminal.write(data.input);
+          terminal.sendInput(data.input);
         }
       });
 

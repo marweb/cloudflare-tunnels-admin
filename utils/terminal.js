@@ -6,6 +6,7 @@ class WebTerminal {
     this.socket = socket;
     this.shell = null;
     this.isActive = false;
+    this.commandQueue = [];
   }
 
   // Start a new shell session
@@ -16,20 +17,19 @@ class WebTerminal {
     }
 
     try {
-      // Determine shell based on OS
-      const shell = os.platform() === 'win32' ? 'cmd.exe' : '/bin/bash';
-      const args = os.platform() === 'win32' ? [] : ['-i'];
-
-      // Spawn shell process
-      this.shell = spawn(shell, args, {
+      // Use bash with interactive mode
+      this.shell = spawn('/bin/bash', ['-i'], {
         stdio: 'pipe',
         env: {
           ...process.env,
           TERM: 'xterm-256color',
           COLORTERM: 'truecolor',
-          PS1: '\\[\\033[01;32m\\]cloudflared-admin\\[\\033[00m\\]:\\[\\033[01;34m\\]\\w\\[\\033[00m\\]\\$ '
+          PS1: '\\[\\033[01;32m\\]cloudflared-admin\\[\\033[00m\\]:\\[\\033[01;34m\\]\\w\\[\\033[00m\\]\\$ ',
+          HOME: '/root',
+          USER: 'root',
+          SHELL: '/bin/bash'
         },
-        cwd: process.cwd()
+        cwd: '/app'
       });
 
       this.isActive = true;
@@ -54,8 +54,15 @@ class WebTerminal {
         this.socket.emit('terminal-error', { error: error.message });
       });
 
-      // Send initial prompt
-      this.socket.emit('terminal-ready', { message: 'Terminal ready. Type commands below.\n' });
+      // Send initial welcome and prompt
+      setTimeout(() => {
+        this.socket.emit('terminal-ready', { 
+          message: '\r\n🚀 Cloudflare Tunnel Admin Terminal\r\n' +
+                  '📁 Current directory: /app\r\n' +
+                  '💡 Type "cloudflared tunnel login" to authenticate\r\n' +
+                  '\r\nroot@cloudflared-admin:/app# '
+        });
+      }, 500);
 
     } catch (error) {
       this.socket.emit('terminal-error', { error: error.message });
@@ -63,14 +70,27 @@ class WebTerminal {
   }
 
   // Send input to shell
-  write(data) {
+  sendInput(data) {
     if (!this.isActive || !this.shell) {
       this.socket.emit('terminal-error', { error: 'No active terminal session' });
       return;
     }
 
     try {
-      this.shell.stdin.write(data);
+      // Handle special keys
+      if (data === '\r') {
+        // Enter key - add newline and execute command
+        this.shell.stdin.write('\n');
+      } else if (data === '\u007f' || data === '\b') {
+        // Backspace - send backspace sequence
+        this.shell.stdin.write('\b');
+      } else if (data === '\u0003') {
+        // Ctrl+C - send interrupt signal
+        this.shell.stdin.write('\u0003');
+      } else {
+        // Regular character input
+        this.shell.stdin.write(data);
+      }
     } catch (error) {
       this.socket.emit('terminal-error', { error: error.message });
     }
