@@ -168,15 +168,18 @@ class SystemdManager {
           console.log('🚀 Extracted tunnel UUID:', tunnelUuid);
           console.log('🚀 Starting cloudflared tunnel...');
           
-          // Use simple command that works reliably
-          const command = `nohup cloudflared tunnel --config ${configPath} run ${tunnelUuid} > /var/log/cloudflared-${tunnelName}.log 2>&1 &`;
+          // Use simple command that works reliably without nohup dependency
+          const command = `cloudflared tunnel --config ${configPath} run ${tunnelUuid} > /var/log/cloudflared-${tunnelName}.log 2>&1 &`;
           console.log('🚀 Executing command:', command);
           
           exec(command, (error, stdout, stderr) => {
+            console.log('🚀 Command stdout:', stdout);
+            console.log('🚀 Command stderr:', stderr);
+            
             if (error) {
               console.error('🚀 Failed to start tunnel:', error);
               console.error('🚀 stderr:', stderr);
-              reject(new Error(`Failed to start tunnel: ${error.message}`));
+              reject(new Error(`Failed to start tunnel: ${error.message}. stderr: ${stderr}`));
               return;
             }
             
