@@ -5,10 +5,10 @@ services:
       dockerfile: Dockerfile
     container_name: cloudflare-tunnel-admin
     ports:
-      - "3333:3333"
+      - "3033:3033"
     environment:
       - NODE_ENV=production
-      - PORT=3333
+      - PORT=3033
     volumes:
       # Mount host systemd and cloudflared directories for tunnel management
       - /etc/cloudflared:/etc/cloudflared:rw
@@ -23,7 +23,7 @@ services:
     network_mode: host
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3333/"]
+      test: ["CMD", "curl", "-f", "http://localhost:3033/"]
       interval: 30s
       timeout: 10s
       retries: 3

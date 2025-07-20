@@ -4,7 +4,7 @@ FROM ubuntu:22.04
 # Set environment variables
 ENV NODE_VERSION=18.17.1
 ENV DEBIAN_FRONTEND=noninteractive
-ENV PORT=3333
+ENV PORT=3033
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -57,11 +57,11 @@ RUN chown -R appuser:appuser /app
 USER appuser
 
 # Expose port
-EXPOSE 3333
+EXPOSE 3033
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:3333/ || exit 1
+    CMD curl -f http://localhost:3033/ || exit 1
 
 # Start the application using the startup script
 CMD ["./docker-start.sh"]

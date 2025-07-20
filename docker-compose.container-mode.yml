@@ -7,10 +7,10 @@ services:
       dockerfile: Dockerfile
     container_name: cloudflare-tunnel-admin
     ports:
-      - "3333:3333"
+      - "3033:3033"
     environment:
       - NODE_ENV=production
-      - PORT=3333
+      - PORT=3033
       - CONTAINER_MODE=true
       - DOCKER_NETWORK=tunnel-network
     volumes:
