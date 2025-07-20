@@ -121,24 +121,53 @@ let fitAddon = null;
 let terminalSocket = null;
 let isConnected = false;
 
-// Initialize terminal when page loads
+// Initialize terminal when page loads - wait for Bootstrap to be ready
 document.addEventListener('DOMContentLoaded', function() {
-    initializeTerminal();
+    // Wait a bit for Bootstrap to fully load
+    setTimeout(() => {
+        initializeTerminal();
+    }, 100);
+});
+
+// Also initialize when window is fully loaded as fallback
+window.addEventListener('load', function() {
+    if (!terminal) {
+        initializeTerminal();
+    }
 });
 
 function initializeTerminal() {
+    // Check if Bootstrap is available
+    if (typeof bootstrap === 'undefined') {
+        console.warn('Bootstrap not yet loaded, retrying in 200ms...');
+        setTimeout(initializeTerminal, 200);
+        return;
+    }
+
     const startButton = document.getElementById('startButton');
     const stopButton = document.getElementById('stopButton');
     const authButton = document.getElementById('authButton');
     const clearButton = document.getElementById('clearButton');
 
-    startButton.addEventListener('click', startTerminal);
-    stopButton.addEventListener('click', stopTerminal);
-    authButton.addEventListener('click', authenticateCloudflared);
-    clearButton.addEventListener('click', clearTerminal);
+    // Add event listeners with error handling
+    try {
+        startButton.addEventListener('click', startTerminal);
+        stopButton.addEventListener('click', stopTerminal);
+        authButton.addEventListener('click', authenticateCloudflared);
+        clearButton.addEventListener('click', clearTerminal);
 
-    // Initialize connection status
-    updateConnectionStatus('disconnected');
+        // Initialize connection status
+        updateConnectionStatus('disconnected');
+        
+        console.log('Terminal initialized successfully');
+    } catch (error) {
+        console.error('Error initializing terminal:', error);
+        // Show fallback message
+        const terminalElement = document.getElementById('terminal');
+        if (terminalElement) {
+            terminalElement.innerHTML = '<div class="alert alert-warning">Terminal initialization failed. Please refresh the page.</div>';
+        }
+    }
 }
 
 function startTerminal() {
