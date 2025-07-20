@@ -113,7 +113,7 @@ class SystemdManager {
     console.log('🚀 Tunnel name to start:', tunnelName);
     
     try {
-      // First, check if tunnel is already running using simple pgrep
+      // First, check if tunnel is already running
       const checkRunning = () => {
         return new Promise((resolve) => {
           exec(`pgrep -f "cloudflared.*${tunnelName}"`, (error, stdout) => {
@@ -141,44 +141,60 @@ class SystemdManager {
         throw new Error(`Configuration file not found: ${configPath}`);
       }
 
-      // Start cloudflared tunnel with correct command
-      console.log('🚀 Starting cloudflared tunnel...');
+      // Read tunnel UUID from config file
+      console.log('🚀 Reading tunnel UUID from config file...');
       
       return new Promise((resolve, reject) => {
-        // Use robust daemon process with setsid and disown for true persistence
-        const command = `setsid cloudflared tunnel --config ${configPath} run ${tunnelName} > /var/log/cloudflared-${tunnelName}.log 2>&1 < /dev/null & echo $! && disown`;
-        console.log('🚀 Executing robust daemon command:', command);
-        
-        exec(command, (error, stdout, stderr) => {
-          if (error) {
-            console.error('🚀 Failed to start tunnel:', error);
-            console.error('🚀 stderr:', stderr);
-            reject(new Error(`Failed to start tunnel: ${error.message}`));
+        exec(`grep "^tunnel:" ${configPath}`, (grepError, grepStdout) => {
+          if (grepError) {
+            console.error('🚀 Failed to read tunnel UUID from config:', grepError);
+            reject(new Error(`Failed to read tunnel UUID from config: ${grepError.message}`));
             return;
           }
           
-          const pid = stdout.trim();
-          console.log('🚀 Tunnel started with PID:', pid);
+          const tunnelUuid = grepStdout.trim().split(':')[1]?.trim();
+          if (!tunnelUuid) {
+            console.error('🚀 Could not extract tunnel UUID from config file');
+            reject(new Error('Could not extract tunnel UUID from config file'));
+            return;
+          }
           
-          // Wait a moment and verify the process is still running
-          setTimeout(async () => {
-            const stillRunning = await checkRunning();
-            if (stillRunning) {
-              console.log(`🚀 ✅ Tunnel ${tunnelName} started successfully and is running`);
-              resolve({ 
-                success: true, 
-                message: `Tunnel ${tunnelName} started successfully`,
-                pid: pid
-              });
-            } else {
-              console.log('🚀 ❌ Tunnel process exited immediately');
-              // Check logs for error
-              exec(`tail -n 10 /var/log/cloudflared-${tunnelName}.log`, (logError, logOutput) => {
-                console.log('🚀 Recent logs:', logOutput);
-                reject(new Error(`Tunnel started but exited immediately. Check logs: ${logOutput}`));
-              });
+          console.log('🚀 Extracted tunnel UUID:', tunnelUuid);
+          console.log('🚀 Starting cloudflared tunnel...');
+          
+          // Use simple command that works reliably
+          const command = `nohup cloudflared tunnel --config ${configPath} run ${tunnelUuid} > /var/log/cloudflared-${tunnelName}.log 2>&1 &`;
+          console.log('🚀 Executing command:', command);
+          
+          exec(command, (error, stdout, stderr) => {
+            if (error) {
+              console.error('🚀 Failed to start tunnel:', error);
+              console.error('🚀 stderr:', stderr);
+              reject(new Error(`Failed to start tunnel: ${error.message}`));
+              return;
             }
-          }, 2000);
+            
+            console.log('🚀 Command executed, checking if tunnel started...');
+            
+            // Wait and verify the process is running
+            setTimeout(async () => {
+              const stillRunning = await checkRunning();
+              if (stillRunning) {
+                console.log(`🚀 ✅ Tunnel ${tunnelName} started successfully and is running`);
+                resolve({ 
+                  success: true, 
+                  message: `Tunnel ${tunnelName} started successfully`
+                });
+              } else {
+                console.log('🚀 ❌ Tunnel process not found after start attempt');
+                // Check logs for error
+                exec(`tail -n 10 /var/log/cloudflared-${tunnelName}.log`, (logError, logOutput) => {
+                  console.log('🚀 Recent logs:', logOutput || 'No logs found');
+                  reject(new Error(`Tunnel failed to start. Logs: ${logOutput || 'No logs available'}`));
+                });
+              }
+            }, 3000);
+          });
         });
       });
     } catch (error) {
