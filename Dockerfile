@@ -32,10 +32,7 @@ COPY package*.json ./
 # Install dependencies
 RUN npm install --only=production
 
-# Explicitly copy public directory first
-COPY public/ ./public/
-
-# Copy rest of application code
+# Copy application code
 COPY . .
 
 # Debug: Check what was copied
