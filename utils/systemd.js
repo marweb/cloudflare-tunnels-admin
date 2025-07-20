@@ -171,7 +171,13 @@ class SystemdManager {
           // Use spawn for better process management
           const { spawn } = require('child_process');
           const fs = require('fs');
-          const logFile = `/var/log/cloudflared-${tunnelName}.log`;
+          const logFile = `/home/appuser/logs/cloudflared-${tunnelName}.log`;
+          
+          // Ensure log directory exists
+          const logDir = '/home/appuser/logs';
+          if (!fs.existsSync(logDir)) {
+            fs.mkdirSync(logDir, { recursive: true });
+          }
           
           console.log('🚀 Spawning cloudflared process...');
           console.log('🚀 Command: cloudflared tunnel --config', configPath, 'run', tunnelUuid);
@@ -341,38 +347,36 @@ class SystemdManager {
   // Get service logs (Docker-compatible version)
   async getServiceLogs(tunnelName, lines = 50) {
     try {
-      const logFile = `/var/log/cloudflared-${tunnelName}.log`;
+      const logFile = `/home/appuser/logs/cloudflared-${tunnelName}.log`;
       console.log(`📄 Reading logs from: ${logFile}`);
       
+      // Check if log file exists
+      const logExists = await fs.pathExists(logFile);
+      if (!logExists) {
+        console.log(`📄 No log file found for tunnel ${tunnelName}`);
+        return `No log file found for tunnel ${tunnelName}. Tunnel may not have been started yet.`;
+      }
+      
+      // Read last N lines from log file
       return new Promise((resolve, reject) => {
-        // Check if log file exists
-        exec(`test -f "${logFile}"`, (testError) => {
-          if (testError) {
-            console.log(`📄 No log file found for tunnel ${tunnelName}`);
-            resolve(`No log file found for tunnel ${tunnelName}. Tunnel may not have been started yet.`);
+        exec(`tail -n ${lines} "${logFile}"`, (error, stdout, stderr) => {
+          if (error) {
+            console.error(`📄 Error reading logs:`, error);
+            resolve('Error reading logs');
             return;
           }
           
-          // Read last N lines from log file
-          exec(`tail -n ${lines} "${logFile}"`, (error, stdout, stderr) => {
-            if (error) {
-              console.error(`📄 Error reading logs:`, error);
-              reject(new Error(`Failed to read logs: ${error.message}`));
-              return;
-            }
-            
-            if (!stdout.trim()) {
-              resolve(`Log file exists but is empty for tunnel ${tunnelName}`);
-            } else {
-              console.log(`📄 Successfully read ${lines} lines from ${tunnelName} logs`);
-              resolve(stdout);
-            }
-          });
+          if (!stdout.trim()) {
+            resolve(`Log file exists but is empty for tunnel ${tunnelName}`);
+          } else {
+            console.log(`📄 Successfully read ${lines} lines from ${tunnelName} logs`);
+            resolve(stdout);
+          }
         });
       });
     } catch (error) {
       console.error(`📄 Error getting service logs:`, error);
-      throw new Error(`Failed to get logs: ${error.message}`);
+      return 'Error retrieving logs';
     }
   }
 
