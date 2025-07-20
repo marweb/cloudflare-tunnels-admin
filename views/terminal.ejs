@@ -1,0 +1,340 @@
+<%- include('partials/header', { title: title }) %>
+
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="h3">
+                <i class="bi bi-terminal"></i>
+                Web Terminal
+            </h1>
+            <div>
+                <button type="button" class="btn btn-outline-secondary me-2" onclick="window.history.back()">
+                    <i class="bi bi-arrow-left"></i>
+                    Back
+                </button>
+                <button type="button" class="btn btn-outline-success me-2" id="authButton">
+                    <i class="bi bi-shield-lock"></i>
+                    Authenticate Cloudflared
+                </button>
+                <button type="button" class="btn btn-outline-danger" id="clearButton">
+                    <i class="bi bi-trash"></i>
+                    Clear
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Connection Status -->
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="alert alert-info" id="connectionStatus" style="display: none;">
+            <i class="bi bi-info-circle"></i>
+            <span id="statusText">Connecting...</span>
+        </div>
+    </div>
+</div>
+
+<!-- Terminal Container -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-terminal"></i>
+                    Interactive Terminal
+                </h5>
+                <div>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="startButton">
+                        <i class="bi bi-play-circle"></i>
+                        Start Terminal
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-danger" id="stopButton" style="display: none;">
+                        <i class="bi bi-stop-circle"></i>
+                        Stop Terminal
+                    </button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div id="terminal" class="terminal-container">
+                    <div class="terminal-placeholder">
+                        <div class="text-center py-5">
+                            <i class="bi bi-terminal display-4 text-muted"></i>
+                            <h5 class="mt-3 text-muted">Terminal Ready</h5>
+                            <p class="text-muted">Click "Start Terminal" to begin an interactive session</p>
+                            <div class="mt-3">
+                                <small class="text-muted">
+                                    <strong>Quick commands:</strong><br>
+                                    • <code>cloudflared tunnel login</code> - Authenticate with Cloudflare<br>
+                                    • <code>cloudflared tunnel list</code> - List existing tunnels<br>
+                                    • <code>ls -la /etc/cloudflared/</code> - View configuration files
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Instructions -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card border-info">
+            <div class="card-header bg-info text-white">
+                <h6 class="card-title mb-0">
+                    <i class="bi bi-info-circle"></i>
+                    Authentication Instructions
+                </h6>
+            </div>
+            <div class="card-body">
+                <h6>To authenticate Cloudflared:</h6>
+                <ol>
+                    <li>Click "Start Terminal" above</li>
+                    <li>Click "Authenticate Cloudflared" or manually type: <code>cloudflared tunnel login</code></li>
+                    <li>Copy and open the URL provided in the terminal output</li>
+                    <li>Select your domain and authorize the tunnel</li>
+                    <li>Return to the main dashboard once authentication is complete</li>
+                </ol>
+                <div class="alert alert-warning mt-3">
+                    <small>
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <strong>Note:</strong> The authentication process will open a URL that you need to visit in a separate tab. 
+                        Make sure to complete the authorization on the Cloudflare website.
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Include xterm.js -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+
+<script>
+// Terminal specific JavaScript
+let terminal = null;
+let fitAddon = null;
+let terminalSocket = null;
+let isConnected = false;
+
+// Initialize terminal when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    initializeTerminal();
+});
+
+function initializeTerminal() {
+    const startButton = document.getElementById('startButton');
+    const stopButton = document.getElementById('stopButton');
+    const authButton = document.getElementById('authButton');
+    const clearButton = document.getElementById('clearButton');
+
+    startButton.addEventListener('click', startTerminal);
+    stopButton.addEventListener('click', stopTerminal);
+    authButton.addEventListener('click', authenticateCloudflared);
+    clearButton.addEventListener('click', clearTerminal);
+
+    // Initialize connection status
+    updateConnectionStatus('disconnected');
+}
+
+function startTerminal() {
+    if (isConnected) return;
+
+    // Create xterm.js terminal
+    terminal = new Terminal({
+        cursorBlink: true,
+        theme: {
+            background: '#1e1e1e',
+            foreground: '#d4d4d4',
+            cursor: '#ffffff',
+            selection: '#264f78'
+        },
+        fontSize: 14,
+        fontFamily: 'Consolas, "Courier New", monospace'
+    });
+
+    fitAddon = new FitAddon.FitAddon();
+    terminal.loadAddon(fitAddon);
+
+    // Mount terminal
+    const terminalElement = document.getElementById('terminal');
+    terminalElement.innerHTML = '';
+    terminal.open(terminalElement);
+    fitAddon.fit();
+
+    // Connect WebSocket
+    terminalSocket = io();
+    
+    terminalSocket.on('connect', () => {
+        isConnected = true;
+        updateConnectionStatus('connected');
+        updateButtons(true);
+        
+        // Start terminal session
+        terminalSocket.emit('terminal-start');
+    });
+
+    terminalSocket.on('disconnect', () => {
+        isConnected = false;
+        updateConnectionStatus('disconnected');
+        updateButtons(false);
+    });
+
+    terminalSocket.on('terminal-ready', (data) => {
+        terminal.write(data.message);
+    });
+
+    terminalSocket.on('terminal-output', (data) => {
+        terminal.write(data.data);
+    });
+
+    terminalSocket.on('terminal-error', (data) => {
+        terminal.write(`\r\n\x1b[31mError: ${data.error}\x1b[0m\r\n`);
+    });
+
+    terminalSocket.on('terminal-exit', (data) => {
+        terminal.write(`\r\n\x1b[33mTerminal exited with code: ${data.code}\x1b[0m\r\n`);
+        stopTerminal();
+    });
+
+    // Handle terminal input
+    terminal.onData((data) => {
+        if (terminalSocket && isConnected) {
+            terminalSocket.emit('terminal-input', { input: data });
+        }
+    });
+
+    // Handle terminal resize
+    terminal.onResize((size) => {
+        if (terminalSocket && isConnected) {
+            terminalSocket.emit('terminal-resize', { cols: size.cols, rows: size.rows });
+        }
+    });
+
+    // Handle window resize
+    window.addEventListener('resize', () => {
+        if (fitAddon) {
+            fitAddon.fit();
+        }
+    });
+
+    updateConnectionStatus('connecting');
+}
+
+function stopTerminal() {
+    if (terminalSocket) {
+        terminalSocket.emit('terminal-kill');
+        terminalSocket.disconnect();
+        terminalSocket = null;
+    }
+
+    if (terminal) {
+        terminal.dispose();
+        terminal = null;
+    }
+
+    isConnected = false;
+    updateConnectionStatus('disconnected');
+    updateButtons(false);
+
+    // Show placeholder
+    const terminalElement = document.getElementById('terminal');
+    terminalElement.innerHTML = `
+        <div class="terminal-placeholder">
+            <div class="text-center py-5">
+                <i class="bi bi-terminal display-4 text-muted"></i>
+                <h5 class="mt-3 text-muted">Terminal Stopped</h5>
+                <p class="text-muted">Click "Start Terminal" to begin a new session</p>
+            </div>
+        </div>
+    `;
+}
+
+function authenticateCloudflared() {
+    if (!isConnected || !terminalSocket) {
+        alert('Please start the terminal first');
+        return;
+    }
+
+    terminalSocket.emit('terminal-auth');
+}
+
+function clearTerminal() {
+    if (terminal) {
+        terminal.clear();
+    }
+}
+
+function updateConnectionStatus(status) {
+    const statusElement = document.getElementById('connectionStatus');
+    const statusText = document.getElementById('statusText');
+    
+    if (!statusElement || !statusText) return;
+
+    statusElement.style.display = 'block';
+    statusElement.className = 'alert';
+
+    switch (status) {
+        case 'connected':
+            statusElement.classList.add('alert-success');
+            statusText.innerHTML = '<i class="bi bi-check-circle"></i> Terminal Connected';
+            break;
+        case 'connecting':
+            statusElement.classList.add('alert-warning');
+            statusText.innerHTML = '<i class="bi bi-arrow-clockwise pulse"></i> Connecting to terminal...';
+            break;
+        case 'disconnected':
+            statusElement.classList.add('alert-secondary');
+            statusText.innerHTML = '<i class="bi bi-x-circle"></i> Terminal Disconnected';
+            break;
+    }
+}
+
+function updateButtons(connected) {
+    const startButton = document.getElementById('startButton');
+    const stopButton = document.getElementById('stopButton');
+    const authButton = document.getElementById('authButton');
+
+    if (connected) {
+        startButton.style.display = 'none';
+        stopButton.style.display = 'inline-block';
+        authButton.disabled = false;
+    } else {
+        startButton.style.display = 'inline-block';
+        stopButton.style.display = 'none';
+        authButton.disabled = true;
+    }
+}
+</script>
+
+<style>
+.terminal-container {
+    height: 500px;
+    background-color: #1e1e1e;
+    border-radius: 0 0 0.375rem 0.375rem;
+}
+
+.terminal-placeholder {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: #f8f9fa;
+    border-radius: 0 0 0.375rem 0.375rem;
+}
+
+.xterm {
+    height: 100% !important;
+    padding: 10px;
+}
+
+.xterm-viewport {
+    overflow-y: auto;
+}
+</style>
+
+<%- include('partials/footer') %>

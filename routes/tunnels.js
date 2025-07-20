@@ -18,4 +18,11 @@ router.get('/logs/:name', (req, res) => {
   });
 });
 
+// Terminal page route
+router.get('/terminal', (req, res) => {
+  res.render('terminal', {
+    title: 'Web Terminal'
+  });
+});
+
 module.exports = router;

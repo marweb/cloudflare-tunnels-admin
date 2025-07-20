@@ -18,8 +18,28 @@ class TunnelController {
       // Ensure cloudflared is installed
       await this.cloudflared.ensureInstalled();
       
-      // Get tunnels and their status
-      const tunnels = await this.cloudflared.listTunnels();
+      let tunnels = [];
+      let cloudflaredInstalled = true;
+      let needsAuth = false;
+      let error = null;
+      
+      try {
+        // Try to get tunnels and their status
+        tunnels = await this.cloudflared.listTunnels();
+      } catch (tunnelError) {
+        console.log('Could not list tunnels:', tunnelError.message);
+        
+        // Check if it's an authentication error
+        if (tunnelError.message.includes('origin cert') || 
+            tunnelError.message.includes('origincert') ||
+            tunnelError.message.includes('cert.pem')) {
+          needsAuth = true;
+          error = 'Cloudflared needs to be authenticated with your Cloudflare account.';
+        } else {
+          error = tunnelError.message;
+        }
+      }
+      
       const services = await this.systemd.getAllTunnelServices();
       
       // Merge tunnel data with service status
@@ -37,7 +57,9 @@ class TunnelController {
       res.render('dashboard', {
         title: 'Cloudflare Tunnel Admin',
         tunnels: tunnelData,
-        cloudflaredInstalled: true
+        cloudflaredInstalled: cloudflaredInstalled,
+        needsAuth: needsAuth,
+        error: error
       });
     } catch (error) {
       console.error('Dashboard error:', error);
@@ -45,6 +67,7 @@ class TunnelController {
         title: 'Cloudflare Tunnel Admin',
         tunnels: [],
         cloudflaredInstalled: false,
+        needsAuth: false,
         error: error.message
       });
     }

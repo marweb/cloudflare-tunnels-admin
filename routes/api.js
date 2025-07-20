@@ -49,14 +49,59 @@ router.post('/containers/create-tunnel', async (req, res) => {
   await tunnelController.createTunnelFromContainer(req, res);
 });
 
-// WebSocket handling for real-time logs
+// WebSocket handling for real-time logs and terminal
 router.use((req, res, next) => {
   if (req.io) {
     req.io.on('connection', (socket) => {
+      // Existing log streaming
       socket.on('start-logs', (data) => {
         const { tunnelName } = data;
         if (tunnelName) {
           tunnelController.streamTunnelLogs(socket, tunnelName);
+        }
+      });
+
+      // Terminal WebSocket handling
+      const WebTerminal = require('../utils/terminal');
+      let terminal = null;
+
+      socket.on('terminal-start', () => {
+        if (terminal) {
+          terminal.kill();
+        }
+        terminal = new WebTerminal(socket);
+        terminal.start();
+      });
+
+      socket.on('terminal-input', (data) => {
+        if (terminal) {
+          terminal.write(data.input);
+        }
+      });
+
+      socket.on('terminal-resize', (data) => {
+        if (terminal) {
+          terminal.resize(data.cols, data.rows);
+        }
+      });
+
+      socket.on('terminal-auth', () => {
+        if (terminal) {
+          terminal.authenticateCloudflared();
+        }
+      });
+
+      socket.on('terminal-kill', () => {
+        if (terminal) {
+          terminal.kill();
+          terminal = null;
+        }
+      });
+
+      socket.on('disconnect', () => {
+        if (terminal) {
+          terminal.kill();
+          terminal = null;
         }
       });
     });
