@@ -164,21 +164,31 @@ class TunnelController {
 
   // Stop tunnel service
   async stopTunnel(req, res) {
+    console.log('🔴 stopTunnel method called!');
+    console.log('🔴 Request params:', req.params);
+    console.log('🔴 Request URL:', req.url);
+    console.log('🔴 Request method:', req.method);
+    
     try {
       const { name } = req.params;
+      console.log('🔴 Tunnel name to stop:', name);
       
       if (!name) {
+        console.log('🔴 No tunnel name provided');
         return res.status(400).json({ 
           success: false, 
           error: 'Tunnel name is required' 
         });
       }
 
+      console.log('🔴 Calling systemd.stopService for:', name);
       const result = await this.systemd.stopService(name);
+      console.log('🔴 stopService result:', result);
+      
       res.json(result);
 
     } catch (error) {
-      console.error('Stop tunnel error:', error);
+      console.error('🔴 Stop tunnel error:', error);
       res.status(500).json({ 
         success: false, 
         error: error.message 

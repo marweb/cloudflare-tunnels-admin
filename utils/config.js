@@ -122,25 +122,21 @@ WantedBy=multi-user.target`;
     const configPath = path.join(this.configDir, `${tunnelName}.yml`);
     const servicePath = path.join(this.systemdDir, `cloudflared-${tunnelName}.service`);
     
-    try {
-      // Remove config file if it exists
-      if (await fs.pathExists(configPath)) {
-        await fs.remove(configPath);
-        console.log(`Removed config file: ${configPath}`);
-      }
+    return new Promise((resolve, reject) => {
+      // Use sudo to remove files since they were created with root permissions
+      const removeCmd = `sudo rm -f "${configPath}" "${servicePath}"`;
       
-      // Remove service file if it exists
-      if (await fs.pathExists(servicePath)) {
-        await fs.remove(servicePath);
-        console.log(`Removed service file: ${servicePath}`);
-      }
-      
-      console.log(`Successfully removed files for tunnel: ${tunnelName}`);
-      return true;
-    } catch (error) {
-      console.error(`Error removing files for tunnel ${tunnelName}:`, error);
-      throw error;
-    }
+      exec(removeCmd, (error, stdout, stderr) => {
+        if (error) {
+          console.error(`Error removing files for tunnel ${tunnelName}:`, error.message);
+          reject(error);
+        } else {
+          console.log(`Successfully removed files for tunnel: ${tunnelName}`);
+          if (stdout) console.log('Remove output:', stdout);
+          resolve(true);
+        }
+      });
+    });
   }
 
   // Check if config exists
