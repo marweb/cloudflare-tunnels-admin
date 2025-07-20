@@ -121,28 +121,39 @@ let fitAddon = null;
 let terminalSocket = null;
 let isConnected = false;
 
-// Initialize terminal when page loads - wait for Bootstrap to be ready
-document.addEventListener('DOMContentLoaded', function() {
-    // Wait a bit for Bootstrap to fully load
-    setTimeout(() => {
-        initializeTerminal();
-    }, 100);
-});
-
-// Also initialize when window is fully loaded as fallback
-window.addEventListener('load', function() {
-    if (!terminal) {
-        initializeTerminal();
+// Utility function to show errors without Bootstrap modals
+function showError(message) {
+    const terminalElement = document.getElementById('terminal');
+    if (terminalElement) {
+        terminalElement.innerHTML = `
+            <div style="background-color: #f8d7da; color: #721c24; padding: 15px; border: 1px solid #f5c6cb; border-radius: 5px; margin: 10px 0;">
+                <strong>Error:</strong> ${message}
+                <br><br>
+                <button onclick="location.reload()" style="background-color: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
+                    Refresh Page
+                </button>
+            </div>
+        `;
     }
+    console.error('Terminal Error:', message);
+}
+
+// Utility function to show success messages
+function showSuccess(message) {
+    const statusElement = document.getElementById('connection-status');
+    if (statusElement) {
+        statusElement.innerHTML = `<span style="color: #28a745;">✓ ${message}</span>`;
+    }
+    console.log('Terminal Success:', message);
+}
+
+// Initialize terminal when page loads - no Bootstrap dependency needed
+document.addEventListener('DOMContentLoaded', function() {
+    initializeTerminal();
 });
 
 function initializeTerminal() {
-    // Check if Bootstrap is available
-    if (typeof bootstrap === 'undefined') {
-        console.warn('Bootstrap not yet loaded, retrying in 200ms...');
-        setTimeout(initializeTerminal, 200);
-        return;
-    }
+    console.log('Initializing terminal...');
 
     const startButton = document.getElementById('startButton');
     const stopButton = document.getElementById('stopButton');
@@ -173,21 +184,43 @@ function initializeTerminal() {
 function startTerminal() {
     if (isConnected) return;
 
-    // Create xterm.js terminal
-    terminal = new Terminal({
-        cursorBlink: true,
-        theme: {
-            background: '#1e1e1e',
-            foreground: '#d4d4d4',
-            cursor: '#ffffff',
-            selection: '#264f78'
-        },
-        fontSize: 14,
-        fontFamily: 'Consolas, "Courier New", monospace'
-    });
+    try {
+        console.log('Starting terminal...');
+        
+        // Check if xterm is available
+        if (typeof Terminal === 'undefined') {
+            console.error('xterm.js not loaded');
+            showError('Terminal library not loaded. Please refresh the page.');
+            return;
+        }
 
-    fitAddon = new FitAddon.FitAddon();
-    terminal.loadAddon(fitAddon);
+        // Create xterm.js terminal
+        terminal = new Terminal({
+            cursorBlink: true,
+            theme: {
+                background: '#1e1e1e',
+                foreground: '#d4d4d4',
+                cursor: '#ffffff',
+                selection: '#264f78'
+            },
+            fontSize: 14,
+            fontFamily: 'Consolas, "Courier New", monospace'
+        });
+
+        // Check if FitAddon is available
+        if (typeof FitAddon === 'undefined') {
+            console.error('FitAddon not loaded');
+            showError('Terminal addon not loaded. Please refresh the page.');
+            return;
+        }
+
+        fitAddon = new FitAddon.FitAddon();
+        terminal.loadAddon(fitAddon);
+    } catch (error) {
+        console.error('Error creating terminal:', error);
+        showError('Failed to create terminal: ' + error.message);
+        return;
+    }
 
     // Mount terminal
     const terminalElement = document.getElementById('terminal');
@@ -296,6 +329,18 @@ function clearTerminal() {
     if (terminal) {
         terminal.clear();
     }
+}
+
+function updateButtons(connected) {
+    const startButton = document.getElementById('startButton');
+    const stopButton = document.getElementById('stopButton');
+    const authButton = document.getElementById('authButton');
+    const clearButton = document.getElementById('clearButton');
+    
+    if (startButton) startButton.disabled = connected;
+    if (stopButton) stopButton.disabled = !connected;
+    if (authButton) authButton.disabled = !connected;
+    if (clearButton) clearButton.disabled = !connected;
 }
 
 function updateConnectionStatus(status) {
