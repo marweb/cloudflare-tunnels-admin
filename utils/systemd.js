@@ -109,120 +109,145 @@ class SystemdManager {
 
   // Start service (Docker-compatible version)
   async startService(tunnelName) {
-    console.log('🟢 startService method called!');
-    console.log('🟢 Tunnel name to start:', tunnelName);
-    
-    const serviceName = this.getServiceName(tunnelName);
+    console.log('🚀 startService method called!');
+    console.log('🚀 Tunnel name to start:', tunnelName);
     
     try {
-      // Check if already running
-      console.log('🟢 Checking if tunnel is already running...');
-      const status = await this.getServiceStatus(tunnelName);
-      console.log('🟢 Current tunnel status:', status);
+      // First, check if tunnel is already running using simple pgrep
+      const checkRunning = () => {
+        return new Promise((resolve) => {
+          exec(`pgrep -f "cloudflared.*${tunnelName}"`, (error, stdout) => {
+            const isRunning = !error && stdout.trim();
+            resolve(isRunning);
+          });
+        });
+      };
       
-      if (status.active) {
-        console.log('🟢 Tunnel is already running, skipping start');
+      const alreadyRunning = await checkRunning();
+      if (alreadyRunning) {
+        console.log('🚀 Tunnel is already running, skipping start');
         return { success: true, message: `Tunnel ${tunnelName} is already running` };
       }
 
-      // Start cloudflared process directly
+      // Verify config file exists
       const configPath = `/etc/cloudflared/${tunnelName}.yml`;
-      console.log('🟢 Config path:', configPath);
+      console.log('🚀 Config path:', configPath);
       
-      // Check if config exists
       const configExists = await fs.pathExists(configPath);
-      console.log('🟢 Config file exists:', configExists);
+      console.log('🚀 Config file exists:', configExists);
       
       if (!configExists) {
-        console.log('🟢 ERROR: Configuration file not found!');
+        console.log('🚀 ERROR: Configuration file not found!');
         throw new Error(`Configuration file not found: ${configPath}`);
       }
 
-      console.log('🟢 Starting cloudflared process...');
-      const spawnArgs = ['tunnel', '--config', configPath, 'run'];
-      console.log('🟢 Spawn command: cloudflared', spawnArgs);
+      // Start cloudflared tunnel with correct command
+      console.log('🚀 Starting cloudflared tunnel...');
       
       return new Promise((resolve, reject) => {
-        const process = spawn('cloudflared', spawnArgs, {
-          detached: true,
-          stdio: ['ignore', 'pipe', 'pipe']
-        });
-
-        console.log('🟢 Process spawned, PID:', process.pid);
-        process.unref(); // Allow parent to exit
-        this.runningProcesses.set(tunnelName, process);
-
-        // Handle process events
-        process.on('error', (error) => {
-          console.error('🟢 Process error:', error);
-          console.error(`🟢 Failed to start tunnel ${tunnelName}:`, error);
-          this.runningProcesses.delete(tunnelName);
-          reject(new Error(`Failed to start tunnel: ${error.message}`));
-        });
+        // Use the correct cloudflared command: cloudflared tunnel run <tunnel-name>
+        const command = `nohup cloudflared tunnel --config ${configPath} run ${tunnelName} > /var/log/cloudflared-${tunnelName}.log 2>&1 & echo $!`;
+        console.log('🚀 Executing command:', command);
         
-        process.on('exit', (code, signal) => {
-          console.log('🟢 Process exited with code:', code, 'signal:', signal);
-        });
-        
-        // Capture stdout and stderr for debugging
-        process.stdout.on('data', (data) => {
-          console.log('🟢 Process stdout:', data.toString());
-        });
-        
-        process.stderr.on('data', (data) => {
-          console.log('🟢 Process stderr:', data.toString());
-        });
-
-        // Give it a moment to start
-        setTimeout(() => {
-          console.log('🟢 Checking process after 1 second, PID:', process.pid);
-          if (process.pid) {
-            console.log(`🟢 Tunnel ${tunnelName} started with PID ${process.pid}`);
-            resolve({ success: true, message: `Tunnel ${tunnelName} started successfully` });
-          } else {
-            console.log('🟢 ERROR: No PID found after spawn');
-            reject(new Error('Failed to start tunnel process'));
+        exec(command, (error, stdout, stderr) => {
+          if (error) {
+            console.error('🚀 Failed to start tunnel:', error);
+            console.error('🚀 stderr:', stderr);
+            reject(new Error(`Failed to start tunnel: ${error.message}`));
+            return;
           }
-        }, 1000);
+          
+          const pid = stdout.trim();
+          console.log('🚀 Tunnel started with PID:', pid);
+          
+          // Wait a moment and verify the process is still running
+          setTimeout(async () => {
+            const stillRunning = await checkRunning();
+            if (stillRunning) {
+              console.log(`🚀 ✅ Tunnel ${tunnelName} started successfully and is running`);
+              resolve({ 
+                success: true, 
+                message: `Tunnel ${tunnelName} started successfully`,
+                pid: pid
+              });
+            } else {
+              console.log('🚀 ❌ Tunnel process exited immediately');
+              // Check logs for error
+              exec(`tail -n 10 /var/log/cloudflared-${tunnelName}.log`, (logError, logOutput) => {
+                console.log('🚀 Recent logs:', logOutput);
+                reject(new Error(`Tunnel started but exited immediately. Check logs: ${logOutput}`));
+              });
+            }
+          }, 2000);
+        });
       });
     } catch (error) {
-      console.error('Error starting service:', error);
+      console.error('🚀 Error starting service:', error);
       throw new Error(`Failed to start service: ${error.message}`);
     }
   }
 
   // Stop service (Docker-compatible version)
   async stopService(tunnelName) {
-    const serviceName = this.getServiceName(tunnelName);
+    console.log(`🛑 stopService method called for tunnel: ${tunnelName}`);
     
     try {
-      // First try to stop tracked process
-      if (this.runningProcesses.has(tunnelName)) {
-        const process = this.runningProcesses.get(tunnelName);
-        process.kill('SIGTERM');
-        this.runningProcesses.delete(tunnelName);
+      // First, check if tunnel is actually running
+      const checkRunning = () => {
+        return new Promise((resolve) => {
+          exec(`pgrep -f "cloudflared.*${tunnelName}"`, (error, stdout) => {
+            const pids = !error && stdout.trim() ? stdout.trim().split('\n') : [];
+            resolve(pids);
+          });
+        });
+      };
+      
+      const runningPids = await checkRunning();
+      console.log(`🛑 Found ${runningPids.length} running processes for tunnel ${tunnelName}:`, runningPids);
+      
+      if (runningPids.length === 0) {
+        console.log(`🛑 No running processes found for tunnel ${tunnelName}`);
+        return { success: true, message: `Tunnel ${tunnelName} is not running` };
       }
 
-      // Also kill any running cloudflared processes for this tunnel
-      return new Promise((resolve) => {
-        exec(`pkill -f "cloudflared.*${tunnelName}"`, (error, stdout, stderr) => {
-          // pkill returns 1 if no processes found, which is not an error for us
-          if (error && error.code !== 1) {
-            console.warn(`Warning stopping tunnel ${tunnelName}:`, stderr);
-            // Still resolve successfully since the tunnel is effectively stopped
-            resolve({ success: true, message: `Tunnel ${tunnelName} stopped (no running processes found)` });
-          } else if (error && error.code === 1) {
-            // No processes found - this is fine
-            console.log(`No running processes found for tunnel ${tunnelName}`);
-            resolve({ success: true, message: `Tunnel ${tunnelName} stopped (no running processes found)` });
-          } else {
-            console.log(`Tunnel ${tunnelName} stopped successfully`);
-            resolve({ success: true, message: `Tunnel ${tunnelName} stopped successfully` });
-          }
+      // Kill all cloudflared processes for this tunnel
+      return new Promise((resolve, reject) => {
+        // Use pkill with exact pattern matching
+        const killCommand = `pkill -f "cloudflared.*${tunnelName}"`;
+        console.log(`🛑 Executing kill command: ${killCommand}`);
+        
+        exec(killCommand, (error, stdout, stderr) => {
+          console.log(`🛑 Kill command result:`, { error: error?.code, stdout, stderr });
+          
+          // Wait a moment and verify processes are stopped
+          setTimeout(async () => {
+            const stillRunning = await checkRunning();
+            console.log(`🛑 Processes still running after kill: ${stillRunning.length}`);
+            
+            if (stillRunning.length === 0) {
+              console.log(`🛑 ✅ Tunnel ${tunnelName} stopped successfully`);
+              resolve({ 
+                success: true, 
+                message: `Tunnel ${tunnelName} stopped successfully`,
+                killedPids: runningPids
+              });
+            } else {
+              // Force kill if still running
+              console.log(`🛑 Force killing remaining processes...`);
+              exec(`pkill -9 -f "cloudflared.*${tunnelName}"`, (forceError) => {
+                console.log(`🛑 Force kill result:`, forceError?.code || 'success');
+                resolve({ 
+                  success: true, 
+                  message: `Tunnel ${tunnelName} force stopped`,
+                  killedPids: runningPids
+                });
+              });
+            }
+          }, 1000);
         });
       });
     } catch (error) {
-      console.error('Error stopping service:', error);
+      console.error(`🛑 Error stopping service ${tunnelName}:`, error);
       throw new Error(`Failed to stop service: ${error.message}`);
     }
   }
@@ -279,18 +304,38 @@ class SystemdManager {
 
   // Get service logs (Docker-compatible version)
   async getServiceLogs(tunnelName, lines = 50) {
-    const serviceName = this.getServiceName(tunnelName);
-    
     try {
-      // In Docker, we'll look for process output or return a message
-      const status = await this.getServiceStatus(tunnelName);
-      if (!status.active) {
-        return `No active process found for tunnel ${tunnelName}`;
-      }
+      const logFile = `/var/log/cloudflared-${tunnelName}.log`;
+      console.log(`📄 Reading logs from: ${logFile}`);
       
-      // For now, return basic status info
-      return `Tunnel ${tunnelName} is running with PID(s): ${status.pids ? status.pids.join(', ') : 'unknown'}\nLogs are available in container stdout/stderr.`;
+      return new Promise((resolve, reject) => {
+        // Check if log file exists
+        exec(`test -f "${logFile}"`, (testError) => {
+          if (testError) {
+            console.log(`📄 No log file found for tunnel ${tunnelName}`);
+            resolve(`No log file found for tunnel ${tunnelName}. Tunnel may not have been started yet.`);
+            return;
+          }
+          
+          // Read last N lines from log file
+          exec(`tail -n ${lines} "${logFile}"`, (error, stdout, stderr) => {
+            if (error) {
+              console.error(`📄 Error reading logs:`, error);
+              reject(new Error(`Failed to read logs: ${error.message}`));
+              return;
+            }
+            
+            if (!stdout.trim()) {
+              resolve(`Log file exists but is empty for tunnel ${tunnelName}`);
+            } else {
+              console.log(`📄 Successfully read ${lines} lines from ${tunnelName} logs`);
+              resolve(stdout);
+            }
+          });
+        });
+      });
     } catch (error) {
+      console.error(`📄 Error getting service logs:`, error);
       throw new Error(`Failed to get logs: ${error.message}`);
     }
   }
@@ -327,25 +372,68 @@ class SystemdManager {
   // Get all tunnel services status (Docker-compatible version)
   async getAllTunnelServices() {
     try {
+      console.log(`📋 Getting all tunnel services...`);
+      
       // Find all cloudflared config files
       const configDir = '/etc/cloudflared';
       if (!await fs.pathExists(configDir)) {
+        console.log(`📋 Config directory ${configDir} does not exist`);
         return [];
       }
       
       const files = await fs.readdir(configDir);
       const configFiles = files.filter(file => file.endsWith('.yml') || file.endsWith('.yaml'));
+      console.log(`📋 Found ${configFiles.length} config files:`, configFiles);
+      
+      // Get all running cloudflared processes at once
+      const getAllRunningProcesses = () => {
+        return new Promise((resolve) => {
+          exec('ps aux | grep cloudflared | grep -v grep', (error, stdout) => {
+            if (error || !stdout.trim()) {
+              resolve([]);
+              return;
+            }
+            
+            const processes = stdout.trim().split('\n').map(line => {
+              const parts = line.trim().split(/\s+/);
+              const pid = parts[1];
+              const command = parts.slice(10).join(' ');
+              return { pid, command };
+            });
+            resolve(processes);
+          });
+        });
+      };
+      
+      const runningProcesses = await getAllRunningProcesses();
+      console.log(`📋 Found ${runningProcesses.length} running cloudflared processes`);
       
       const services = [];
       for (const configFile of configFiles) {
         const tunnelName = path.basename(configFile, path.extname(configFile));
-        const status = await this.getServiceStatus(tunnelName);
-        services.push(status);
+        
+        // Check if this tunnel has running processes
+        const tunnelProcesses = runningProcesses.filter(proc => 
+          proc.command.includes(tunnelName)
+        );
+        
+        const isActive = tunnelProcesses.length > 0;
+        const pids = tunnelProcesses.map(proc => proc.pid);
+        
+        services.push({
+          name: tunnelName,
+          service: this.getServiceName(tunnelName),
+          active: isActive,
+          running: isActive,
+          status: isActive ? 'active' : 'inactive',
+          pids: pids
+        });
       }
       
+      console.log(`📋 Returning ${services.length} tunnel services`);
       return services;
     } catch (error) {
-      console.error('Error getting all tunnel services:', error);
+      console.error('📋 Error getting all tunnel services:', error);
       return [];
     }
   }

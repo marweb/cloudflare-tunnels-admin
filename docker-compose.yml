@@ -19,8 +19,8 @@ services:
       # Mount systemctl for service management
       - /bin/systemctl:/bin/systemctl:ro
       - /usr/bin/systemctl:/usr/bin/systemctl:ro
-      # Persist Cloudflare credentials between deployments
-      - cloudflared_credentials:/root/.cloudflared:rw
+      # Persist Cloudflare credentials between deployments (appuser home directory)
+      - cloudflared_credentials:/home/appuser/.cloudflared:rw
     privileged: true
     network_mode: host
     restart: unless-stopped

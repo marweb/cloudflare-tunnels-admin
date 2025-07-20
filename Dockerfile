@@ -67,6 +67,11 @@ RUN useradd -m -s /bin/bash appuser \
 # Change ownership of app directory
 RUN chown -R appuser:appuser /app
 
+# Create and set permissions for appuser .cloudflared directory
+RUN mkdir -p /home/appuser/.cloudflared \
+    && chown -R appuser:appuser /home/appuser/.cloudflared \
+    && chmod 700 /home/appuser/.cloudflared
+
 # Switch to app user
 USER appuser
 
