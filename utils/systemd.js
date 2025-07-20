@@ -116,8 +116,14 @@ class SystemdManager {
       // First, check if tunnel is already running
       const checkRunning = () => {
         return new Promise((resolve) => {
-          exec(`pgrep -f "cloudflared.*${tunnelName}"`, (error, stdout) => {
-            const isRunning = !error && stdout.trim();
+          // Use more specific pattern and check actual process list
+          exec(`ps aux | grep "cloudflared.*${tunnelName}" | grep -v grep`, (error, stdout) => {
+            const processes = stdout ? stdout.trim().split('\n').filter(line => line.includes('cloudflared') && line.includes(tunnelName)) : [];
+            const isRunning = processes.length > 0;
+            console.log(`🚀 Checking if ${tunnelName} is running: ${isRunning} (found ${processes.length} processes)`);
+            if (processes.length > 0) {
+              console.log(`🚀 Running processes:`, processes);
+            }
             resolve(isRunning);
           });
         });
