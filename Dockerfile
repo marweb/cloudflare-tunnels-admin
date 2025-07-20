@@ -11,11 +11,12 @@ RUN apt-get update && apt-get install -y \
     curl \
     wget \
     sudo \
-    systemctl \
     systemd \
+    systemd-sysv \
     ca-certificates \
     gnupg \
     lsb-release \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js

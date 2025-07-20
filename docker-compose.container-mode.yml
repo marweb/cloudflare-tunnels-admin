@@ -1,5 +1,3 @@
-version: '3.8'
-
 # Example: Container-aware mode for managing tunnels to other containers
 services:
   # Main tunnel admin panel
@@ -9,10 +7,10 @@ services:
       dockerfile: Dockerfile
     container_name: cloudflare-tunnel-admin
     ports:
-      - "3000:3000"
+      - "3333:3333"
     environment:
       - NODE_ENV=production
-      - PORT=3000
+      - PORT=3333
       - CONTAINER_MODE=true
       - DOCKER_NETWORK=tunnel-network
     volumes:
