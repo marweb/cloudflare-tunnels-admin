@@ -26,22 +26,82 @@ class CloudflaredManager {
     });
   }
 
+  // Install cloudflared using official method (fallback)
+  async installOfficial() {
+    try {
+      console.log('Installing cloudflared using official method...');
+      
+      return new Promise((resolve, reject) => {
+        // Use the official installation script
+        const installCmd = `
+          curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb && \
+          sudo dpkg -i cloudflared.deb && \
+          rm cloudflared.deb
+        `;
+        
+        exec(installCmd, (error, stdout, stderr) => {
+          if (error) {
+            console.error('Official installation failed:', error);
+            reject(error);
+          } else {
+            console.log('Cloudflared installed successfully via official method');
+            this.cloudflaredPath = '/usr/local/bin/cloudflared';
+            resolve(true);
+          }
+        });
+      });
+    } catch (error) {
+      console.error('Failed to install cloudflared via official method:', error);
+      throw error;
+    }
+  }
+
   // Install cloudflared from GitHub releases
   async install() {
     try {
       console.log('Installing cloudflared...');
       
+      // Try official method first
+      try {
+        await this.installOfficial();
+        return true;
+      } catch (officialError) {
+        console.log('Official installation failed, trying GitHub releases...');
+      }
+      
       // Get the latest release info
       const response = await axios.get('https://api.github.com/repos/cloudflare/cloudflared/releases/latest');
       const release = response.data;
       
-      // Find the Linux AMD64 asset
-      const asset = release.assets.find(asset => 
-        asset.name.includes('linux-amd64') && asset.name.endsWith('.tgz')
+      // Find the Linux AMD64 asset - try multiple patterns
+      let asset = release.assets.find(asset => 
+        asset.name.includes('linux-amd64') && (asset.name.endsWith('.tgz') || asset.name.endsWith('.tar.gz'))
       );
       
+      // Try alternative naming patterns
       if (!asset) {
-        throw new Error('Could not find Linux AMD64 release');
+        asset = release.assets.find(asset => 
+          asset.name.includes('linux_amd64') && (asset.name.endsWith('.tgz') || asset.name.endsWith('.tar.gz'))
+        );
+      }
+      
+      // Try without compression extension
+      if (!asset) {
+        asset = release.assets.find(asset => 
+          asset.name.includes('linux-amd64') && !asset.name.includes('.sig')
+        );
+      }
+      
+      // Try direct binary download
+      if (!asset) {
+        asset = release.assets.find(asset => 
+          asset.name === 'cloudflared-linux-amd64'
+        );
+      }
+      
+      if (!asset) {
+        console.log('Available assets:', release.assets.map(a => a.name));
+        throw new Error('Could not find Linux AMD64 release. Available assets: ' + release.assets.map(a => a.name).join(', '));
       }
 
       // Download the binary
@@ -64,24 +124,34 @@ class CloudflaredManager {
         writer.on('error', reject);
       });
 
-      // Extract the binary
-      const extractDir = path.join(tempDir, 'cloudflared-extract');
-      await fs.ensureDir(extractDir);
+      let binaryPath;
       
-      await tar.x({
-        file: downloadPath,
-        cwd: extractDir
-      });
+      // Check if the downloaded file is compressed
+      if (asset.name.endsWith('.tgz') || asset.name.endsWith('.tar.gz')) {
+        // Extract the binary from compressed file
+        const extractDir = path.join(tempDir, 'cloudflared-extract');
+        await fs.ensureDir(extractDir);
+        
+        await tar.x({
+          file: downloadPath,
+          cwd: extractDir
+        });
 
-      // Find the cloudflared binary in extracted files
-      const files = await fs.readdir(extractDir);
-      const binaryFile = files.find(file => file === 'cloudflared' || file.endsWith('/cloudflared'));
-      
-      if (!binaryFile) {
-        throw new Error('Could not find cloudflared binary in extracted files');
+        // Find the cloudflared binary in extracted files
+        const files = await fs.readdir(extractDir);
+        const binaryFile = files.find(file => file === 'cloudflared' || file.endsWith('/cloudflared'));
+        
+        if (!binaryFile) {
+          throw new Error('Could not find cloudflared binary in extracted files');
+        }
+
+        binaryPath = path.join(extractDir, binaryFile);
+      } else {
+        // Direct binary download - just rename the file
+        binaryPath = path.join(tempDir, 'cloudflared');
+        await fs.move(downloadPath, binaryPath);
+        await fs.chmod(binaryPath, '755');
       }
-
-      const binaryPath = path.join(extractDir, binaryFile);
       
       // Move to /usr/local/bin and make executable
       return new Promise((resolve, reject) => {
