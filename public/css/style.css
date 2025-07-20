@@ -1,0 +1,195 @@
+/* Custom styles for Cloudflare Tunnel Admin */
+
+/* General styles */
+body {
+    background-color: #f8f9fa;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.navbar-brand {
+    font-weight: 600;
+}
+
+/* Tunnel cards */
+.tunnel-card {
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.tunnel-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.tunnel-card .card-header {
+    background-color: #fff;
+    border-bottom: 1px solid #dee2e6;
+}
+
+/* Log terminal */
+.log-terminal {
+    background-color: #1e1e1e;
+    color: #d4d4d4;
+    font-family: 'Courier New', Consolas, monospace;
+    font-size: 14px;
+    height: 500px;
+    overflow-y: auto;
+    padding: 15px;
+    border-radius: 0 0 0.375rem 0.375rem;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.log-terminal .log-line {
+    margin-bottom: 2px;
+    line-height: 1.4;
+}
+
+.log-terminal .log-line.error {
+    color: #f48771;
+}
+
+.log-terminal .log-line.warning {
+    color: #dcdcaa;
+}
+
+.log-terminal .log-line.info {
+    color: #9cdcfe;
+}
+
+.log-terminal .log-line.success {
+    color: #4ec9b0;
+}
+
+/* Scrollbar styling for log terminal */
+.log-terminal::-webkit-scrollbar {
+    width: 8px;
+}
+
+.log-terminal::-webkit-scrollbar-track {
+    background: #2d2d30;
+}
+
+.log-terminal::-webkit-scrollbar-thumb {
+    background: #424245;
+    border-radius: 4px;
+}
+
+.log-terminal::-webkit-scrollbar-thumb:hover {
+    background: #4c4c50;
+}
+
+/* Status badges */
+.badge {
+    font-size: 0.75em;
+}
+
+/* Button groups */
+.btn-group .btn {
+    font-size: 0.875rem;
+}
+
+/* Loading spinner */
+.spinner-border-sm {
+    width: 1rem;
+    height: 1rem;
+}
+
+/* Alert animations */
+.alert {
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .btn-group {
+        flex-direction: column;
+    }
+    
+    .btn-group .btn {
+        border-radius: 0.375rem !important;
+        margin-bottom: 0.25rem;
+    }
+    
+    .btn-group .btn:last-child {
+        margin-bottom: 0;
+    }
+    
+    .log-terminal {
+        height: 400px;
+        font-size: 12px;
+    }
+    
+    .card-header .d-flex {
+        flex-direction: column;
+        align-items: flex-start !important;
+    }
+    
+    .card-header .badge {
+        margin-top: 0.5rem;
+    }
+}
+
+/* Form validation */
+.form-control:invalid {
+    border-color: #dc3545;
+}
+
+.form-control:valid {
+    border-color: #198754;
+}
+
+/* Custom utilities */
+.text-monospace {
+    font-family: 'Courier New', Consolas, monospace;
+}
+
+.bg-terminal {
+    background-color: #1e1e1e !important;
+}
+
+.text-terminal {
+    color: #d4d4d4 !important;
+}
+
+/* Connection status indicators */
+.status-connected {
+    color: #198754;
+}
+
+.status-disconnected {
+    color: #dc3545;
+}
+
+.status-connecting {
+    color: #fd7e14;
+}
+
+/* Pulse animation for live indicators */
+.pulse {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+    100% {
+        opacity: 1;
+    }
+}
