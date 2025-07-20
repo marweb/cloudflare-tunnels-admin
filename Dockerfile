@@ -32,13 +32,25 @@ COPY package*.json ./
 # Install dependencies
 RUN npm install --only=production
 
-# Copy application code
+# Explicitly copy public directory first
+COPY public/ ./public/
+
+# Copy rest of application code
 COPY . .
 
+# Debug: Check what was copied
+RUN echo "=== Checking copied files ===" && ls -la /app/
+
 # Ensure public directory exists and has correct permissions
-RUN ls -la /app/public/ || echo "Public directory not found"
-RUN chmod -R 755 /app/public/
-RUN ls -la /app/public/
+RUN if [ -d "/app/public" ]; then \
+        echo "Public directory found, setting permissions..." && \
+        chmod -R 755 /app/public/ && \
+        ls -la /app/public/; \
+    else \
+        echo "Public directory not found, creating it..." && \
+        mkdir -p /app/public/css /app/public/js && \
+        echo "Created empty public directory structure"; \
+    fi
 
 # Make startup script executable
 RUN chmod +x docker-start.sh
