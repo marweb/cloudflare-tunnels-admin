@@ -33,8 +33,16 @@ function initializeSession() {
   console.log(`👤 Admin username: ${ADMIN_USERNAME}`);
   console.log(`🔑 Password configured: ${ADMIN_PASSWORD ? 'Yes' : 'No'}`);
   
+  // Debug: Show raw environment variable values
+  console.log('🐛 DEBUG - Environment variables:');
+  console.log(`   ADMIN_USERNAME: "${process.env.ADMIN_USERNAME}" (type: ${typeof process.env.ADMIN_USERNAME})`);
+  console.log(`   ADMIN_PASSWORD: "${process.env.ADMIN_PASSWORD ? '[SET]' : '[NOT SET]'}" (type: ${typeof process.env.ADMIN_PASSWORD})`);
+  
   if (!process.env.ADMIN_USERNAME || !process.env.ADMIN_PASSWORD) {
     console.warn('⚠️  WARNING: Using default credentials! Set ADMIN_USERNAME and ADMIN_PASSWORD environment variables.');
+    console.warn('   Current fallback values:');
+    console.warn(`   - Username: ${ADMIN_USERNAME}`);
+    console.warn(`   - Password: ${ADMIN_PASSWORD ? '[SET]' : '[NOT SET]'}`);
   }
   
   return session(sessionConfig);
@@ -53,12 +61,12 @@ function isAuthenticated(req, res, next) {
     return res.status(401).json({ 
       success: false, 
       error: 'Authentication required',
-      redirectTo: '/login'
+      redirectTo: '/auth/login'
     });
   }
   
   // For regular requests, redirect to login
-  res.redirect('/login');
+  res.redirect('/auth/login');
 }
 
 /**

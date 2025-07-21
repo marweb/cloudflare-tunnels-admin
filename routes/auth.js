@@ -13,10 +13,21 @@ const {
 
 // Login page
 router.get('/login', loginPageAccess, (req, res) => {
-  res.render('login', { 
-    title: 'Login - Cloudflare Tunnel Admin',
-    error: null 
-  });
+  console.log('🔐 DEBUG: Login page accessed');
+  console.log('🔐 DEBUG: Session info:', req.session);
+  console.log('🔐 DEBUG: Authenticated:', req.session?.authenticated);
+  
+  try {
+    console.log('🔐 DEBUG: Rendering login view...');
+    res.render('login', { 
+      title: 'Login - Cloudflare Tunnel Admin',
+      error: null 
+    });
+    console.log('🔐 DEBUG: Login view rendered successfully');
+  } catch (error) {
+    console.error('❌ ERROR: Failed to render login view:', error);
+    res.status(500).send('Error loading login page: ' + error.message);
+  }
 });
 
 // Login POST handler

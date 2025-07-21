@@ -18,6 +18,9 @@ sudo mkdir -p /var/log/cloudflared
 
 # Set proper permissions
 sudo chmod 755 /etc/cloudflared
+# Give write permissions to appuser (UID 1000) for tunnel state management
+sudo chown -R appuser:appuser /etc/cloudflared
+sudo chmod 775 /etc/cloudflared
 
 # Fix ping_group_range for cloudflared ICMP proxy
 echo "🔧 Fixing ping_group_range for cloudflared ICMP proxy..."
