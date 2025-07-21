@@ -56,7 +56,7 @@
                                 </a>
                             </li>
                             <li><strong>Manual way:</strong> Access container shell:
-                                <code class="d-block mt-1 mb-2">docker-compose exec cloudflare-tunnel-admin bash</code>
+                                <code class="d-block mt-1 mb-2">docker exec -it cloudflare-tunnel-admin sh</code>
                             </li>
                             <li>Run the login command:
                                 <code class="d-block mt-1 mb-2">cloudflared tunnel login</code>
@@ -150,26 +150,7 @@
     <% } %>
 </div>
 
-<!-- Docker Containers Section -->
-<div class="row mt-5">
-    <div class="col-12">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2 class="h4">
-                <i class="bi bi-box"></i>
-                Docker Containers
-                <small class="text-muted">(Auto-tunnel Creation)</small>
-            </h2>
-            <button type="button" class="btn btn-outline-primary" onclick="refreshContainers()">
-                <i class="bi bi-arrow-clockwise"></i>
-                Refresh
-            </button>
-        </div>
-    </div>
-</div>
 
-<div class="row" id="containersGrid">
-    <!-- Containers will be loaded here -->
-</div>
 
 <!-- Create Tunnel Modal -->
 <div class="modal fade" id="createTunnelModal" tabindex="-1">

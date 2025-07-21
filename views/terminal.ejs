@@ -5,74 +5,106 @@
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1 class="h3">
                 <i class="bi bi-terminal"></i>
-                Web Terminal
+                Command Terminal
             </h1>
             <div>
                 <button type="button" class="btn btn-outline-secondary me-2" onclick="window.history.back()">
                     <i class="bi bi-arrow-left"></i>
                     Back
                 </button>
-                <button type="button" class="btn btn-outline-success me-2" id="authButton">
-                    <i class="bi bi-shield-lock"></i>
-                    Authenticate Cloudflared
-                </button>
-                <button type="button" class="btn btn-outline-danger" id="clearButton">
+                <button type="button" class="btn btn-outline-danger" onclick="clearTerminal()">
                     <i class="bi bi-trash"></i>
-                    Clear
+                    Clear Output
                 </button>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Connection Status -->
+<!-- Quick Commands -->
 <div class="row mb-3">
     <div class="col-12">
-        <div class="alert alert-info" id="connectionStatus" style="display: none;">
-            <i class="bi bi-info-circle"></i>
-            <span id="statusText">Connecting...</span>
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-lightning"></i>
+                    Quick Commands
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-2">
+                    <div class="col-md-3">
+                        <button type="button" class="btn btn-outline-success w-100" onclick="executeCommand('cloudflared tunnel login')">
+                            <i class="bi bi-shield-lock"></i>
+                            Authenticate
+                        </button>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="button" class="btn btn-outline-info w-100" onclick="executeCommand('cloudflared tunnel list')">
+                            <i class="bi bi-list"></i>
+                            List Tunnels
+                        </button>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="button" class="btn btn-outline-secondary w-100" onclick="executeCommand('cloudflared version')">
+                            <i class="bi bi-info-circle"></i>
+                            Version
+                        </button>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="button" class="btn btn-outline-warning w-100" onclick="executeCommand('ls -la /etc/cloudflared/')">
+                            <i class="bi bi-folder"></i>
+                            Config Files
+                        </button>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
 
-<!-- Terminal Container -->
+<!-- Custom Command -->
+<div class="row mb-3">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-code"></i>
+                    Custom Command
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="input-group">
+                    <input type="text" class="form-control" id="customCommand" placeholder="Enter command (e.g., cloudflared tunnel list)" onkeypress="handleCommandKeypress(event)">
+                    <button type="button" class="btn btn-primary" onclick="executeCustomCommand()">
+                        <i class="bi bi-play"></i>
+                        Execute
+                    </button>
+                </div>
+                <small class="text-muted mt-2 d-block">
+                    <strong>Tip:</strong> Press Enter to execute the command
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Command Output -->
 <div class="row">
     <div class="col-12">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <h5 class="card-title mb-0">
                     <i class="bi bi-terminal"></i>
-                    Interactive Terminal
+                    Command Output
                 </h5>
                 <div>
-                    <button type="button" class="btn btn-sm btn-outline-primary" id="startButton">
-                        <i class="bi bi-play-circle"></i>
-                        Start Terminal
-                    </button>
-                    <button type="button" class="btn btn-sm btn-outline-danger" id="stopButton" style="display: none;">
-                        <i class="bi bi-stop-circle"></i>
-                        Stop Terminal
-                    </button>
+                    <span class="badge bg-secondary" id="commandStatus">Ready</span>
+                    <small class="text-muted ms-2" id="lastCommand"></small>
                 </div>
             </div>
             <div class="card-body p-0">
-                <div id="terminal" class="terminal-container">
-                    <div class="terminal-placeholder">
-                        <div class="text-center py-5">
-                            <i class="bi bi-terminal display-4 text-muted"></i>
-                            <h5 class="mt-3 text-muted">Terminal Ready</h5>
-                            <p class="text-muted">Click "Start Terminal" to begin an interactive session</p>
-                            <div class="mt-3">
-                                <small class="text-muted">
-                                    <strong>Quick commands:</strong><br>
-                                    • <code>cloudflared tunnel login</code> - Authenticate with Cloudflare<br>
-                                    • <code>cloudflared tunnel list</code> - List existing tunnels<br>
-                                    • <code>ls -la /etc/cloudflared/</code> - View configuration files
-                                </small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <textarea id="terminalOutput" class="form-control terminal-output" readonly rows="20" placeholder="Command output will appear here..."></textarea>
             </div>
         </div>
     </div>
@@ -85,331 +117,225 @@
             <div class="card-header bg-info text-white">
                 <h6 class="card-title mb-0">
                     <i class="bi bi-info-circle"></i>
-                    Authentication Instructions
+                    How to Use the Terminal
                 </h6>
             </div>
             <div class="card-body">
-                <h6>To authenticate Cloudflared:</h6>
+                <h6>Quick Start:</h6>
                 <ol>
-                    <li>Click "Start Terminal" above</li>
-                    <li>Click "Authenticate Cloudflared" or manually type: <code>cloudflared tunnel login</code></li>
-                    <li>Copy and open the URL provided in the terminal output</li>
-                    <li>Select your domain and authorize the tunnel</li>
-                    <li>Return to the main dashboard once authentication is complete</li>
+                    <li>Use the <strong>Quick Commands</strong> buttons above for common tasks</li>
+                    <li>Or enter custom commands in the <strong>Custom Command</strong> field</li>
+                    <li>View command output in the <strong>Command Output</strong> area below</li>
+                    <li>Use "Clear Output" to clean the output area</li>
                 </ol>
+                
+                <div class="alert alert-success mt-3">
+                    <i class="bi bi-lightbulb"></i>
+                    <strong>Authentication:</strong> 
+                    Click "Authenticate" button to start the Cloudflare login process. Follow the URL in the output to complete authentication.
+                </div>
+                
                 <div class="alert alert-warning mt-3">
-                    <small>
-                        <i class="bi bi-exclamation-triangle"></i>
-                        <strong>Note:</strong> The authentication process will open a URL that you need to visit in a separate tab. 
-                        Make sure to complete the authorization on the Cloudflare website.
-                    </small>
+                    <i class="bi bi-shield-exclamation"></i>
+                    <strong>Security:</strong> 
+                    Only safe, predefined commands are allowed for security reasons.
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Include xterm.js -->
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
-<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
-
 <script>
-// Terminal specific JavaScript
-console.log('Terminal script loading...');
+// Simplified Terminal JavaScript
+console.log('Simplified terminal loading...');
 
-// Terminal-specific variables
-let terminal = null;
-let fitAddon = null;
-let terminalSocket = null;
-let isConnected = false;
+// Terminal variables
+let isExecuting = false;
 
-// Utility function to show errors without Bootstrap modals
-function showError(message) {
-    const terminalElement = document.getElementById('terminal');
-    if (terminalElement) {
-        terminalElement.innerHTML = `
-            <div style="background-color: #f8d7da; color: #721c24; padding: 15px; border: 1px solid #f5c6cb; border-radius: 5px; margin: 10px 0;">
-                <strong>Error:</strong> ${message}
-                <br><br>
-                <button onclick="location.reload()" style="background-color: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
-                    Refresh Page
-                </button>
-            </div>
-        `;
+// Execute a command
+function executeCommand(command) {
+    if (isExecuting) {
+        showAlert('A command is already running. Please wait...', 'warning');
+        return;
     }
-    console.error('Terminal Error:', message);
+    
+    const output = document.getElementById('terminalOutput');
+    const status = document.getElementById('commandStatus');
+    const lastCommand = document.getElementById('lastCommand');
+    
+    // Update UI
+    isExecuting = true;
+    status.textContent = 'Running';
+    status.className = 'badge bg-warning';
+    lastCommand.textContent = `Last: ${command}`;
+    
+    // Add command to output
+    const timestamp = new Date().toLocaleTimeString();
+    output.value += `\n[${timestamp}] $ ${command}\n`;
+    output.scrollTop = output.scrollHeight;
+    
+    // Execute command via API
+    fetch('/api/terminal/execute', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ command: command })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            output.value += data.output || 'Command completed successfully.';
+            status.textContent = 'Success';
+            status.className = 'badge bg-success';
+        } else {
+            output.value += `Error: ${data.error || 'Command failed'}`;
+            status.textContent = 'Error';
+            status.className = 'badge bg-danger';
+        }
+        output.value += '\n';
+        output.scrollTop = output.scrollHeight;
+    })
+    .catch(error => {
+        console.error('Command execution error:', error);
+        output.value += `Error: Failed to execute command - ${error.message}\n`;
+        status.textContent = 'Error';
+        status.className = 'badge bg-danger';
+        output.scrollTop = output.scrollHeight;
+    })
+    .finally(() => {
+        isExecuting = false;
+        setTimeout(() => {
+            status.textContent = 'Ready';
+            status.className = 'badge bg-secondary';
+        }, 3000);
+    });
 }
 
-// Utility function to show success messages
-function showSuccess(message) {
-    const statusElement = document.getElementById('connection-status');
-    if (statusElement) {
-        statusElement.innerHTML = `<span style="color: #28a745;">✓ ${message}</span>`;
+// Execute custom command
+function executeCustomCommand() {
+    const input = document.getElementById('customCommand');
+    const command = input.value.trim();
+    
+    if (!command) {
+        showAlert('Please enter a command', 'warning');
+        return;
     }
-    console.log('Terminal Success:', message);
+    
+    executeCommand(command);
+    input.value = '';
 }
 
-// Initialize terminal when page loads - no Bootstrap dependency needed
+// Handle Enter key in custom command input
+function handleCommandKeypress(event) {
+    if (event.key === 'Enter') {
+        executeCustomCommand();
+    }
+}
+
+// Clear terminal output
+function clearTerminal() {
+    const output = document.getElementById('terminalOutput');
+    const status = document.getElementById('commandStatus');
+    const lastCommand = document.getElementById('lastCommand');
+    
+    output.value = '';
+    status.textContent = 'Ready';
+    status.className = 'badge bg-secondary';
+    lastCommand.textContent = '';
+    
+    showAlert('Terminal output cleared', 'success');
+}
+
+// Show alert messages
+function showAlert(message, type = 'info') {
+    // Create alert element
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    // Insert at top of page
+    const container = document.querySelector('.container-fluid');
+    const firstRow = container.querySelector('.row');
+    container.insertBefore(alertDiv, firstRow);
+    
+    // Auto-dismiss after 3 seconds
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 3000);
+}
+
+// Initialize when page loads
 document.addEventListener('DOMContentLoaded', function() {
-    initializeTerminal();
+    console.log('Simplified terminal initialized');
+    
+    // Add welcome message
+    const output = document.getElementById('terminalOutput');
+    output.value = '🚀 Cloudflare Tunnel Command Terminal\n';
+    output.value += '💡 Use the Quick Commands above or enter custom commands\n';
+    output.value += '🔒 Only safe, predefined commands are allowed\n\n';
 });
 
-function initializeTerminal() {
-    console.log('Initializing terminal...');
 
-    const startButton = document.getElementById('startButton');
-    const stopButton = document.getElementById('stopButton');
-    const authButton = document.getElementById('authButton');
-    const clearButton = document.getElementById('clearButton');
-
-    // Add event listeners with error handling
-    try {
-        startButton.addEventListener('click', startTerminal);
-        stopButton.addEventListener('click', stopTerminal);
-        authButton.addEventListener('click', authenticateCloudflared);
-        clearButton.addEventListener('click', clearTerminal);
-
-        // Initialize connection status
-        updateConnectionStatus('disconnected');
-        
-        console.log('Terminal initialized successfully');
-    } catch (error) {
-        console.error('Error initializing terminal:', error);
-        // Show fallback message
-        const terminalElement = document.getElementById('terminal');
-        if (terminalElement) {
-            terminalElement.innerHTML = '<div class="alert alert-warning">Terminal initialization failed. Please refresh the page.</div>';
-        }
-    }
-}
-
-function startTerminal() {
-    if (isConnected) return;
-
-    try {
-        console.log('Starting terminal...');
-        
-        // Check if xterm is available
-        if (typeof Terminal === 'undefined') {
-            console.error('xterm.js not loaded');
-            showError('Terminal library not loaded. Please refresh the page.');
-            return;
-        }
-
-        // Create xterm.js terminal
-        terminal = new Terminal({
-            cursorBlink: true,
-            theme: {
-                background: '#1e1e1e',
-                foreground: '#d4d4d4',
-                cursor: '#ffffff',
-                selection: '#264f78'
-            },
-            fontSize: 14,
-            fontFamily: 'Consolas, "Courier New", monospace'
-        });
-
-        // Check if FitAddon is available
-        if (typeof FitAddon === 'undefined') {
-            console.error('FitAddon not loaded');
-            showError('Terminal addon not loaded. Please refresh the page.');
-            return;
-        }
-
-        fitAddon = new FitAddon.FitAddon();
-        terminal.loadAddon(fitAddon);
-    } catch (error) {
-        console.error('Error creating terminal:', error);
-        showError('Failed to create terminal: ' + error.message);
-        return;
-    }
-
-    // Mount terminal
-    const terminalElement = document.getElementById('terminal');
-    terminalElement.innerHTML = '';
-    terminal.open(terminalElement);
-    fitAddon.fit();
-
-    // Connect WebSocket
-    terminalSocket = io();
-    
-    terminalSocket.on('connect', () => {
-        isConnected = true;
-        updateConnectionStatus('connected');
-        updateButtons(true);
-        
-        // Start terminal session
-        terminalSocket.emit('terminal-start');
-    });
-
-    terminalSocket.on('disconnect', () => {
-        isConnected = false;
-        updateConnectionStatus('disconnected');
-        updateButtons(false);
-    });
-
-    terminalSocket.on('terminal-ready', (data) => {
-        terminal.write(data.message);
-    });
-
-    terminalSocket.on('terminal-output', (data) => {
-        terminal.write(data.data);
-    });
-
-    terminalSocket.on('terminal-error', (data) => {
-        terminal.write(`\r\n\x1b[31mError: ${data.error}\x1b[0m\r\n`);
-    });
-
-    terminalSocket.on('terminal-exit', (data) => {
-        terminal.write(`\r\n\x1b[33mTerminal exited with code: ${data.code}\x1b[0m\r\n`);
-        stopTerminal();
-    });
-
-    // Handle terminal input
-    terminal.onData((data) => {
-        if (terminalSocket && isConnected) {
-            terminalSocket.emit('terminal-input', { input: data });
-        }
-    });
-
-    // Handle terminal resize
-    terminal.onResize((size) => {
-        if (terminalSocket && isConnected) {
-            terminalSocket.emit('terminal-resize', { cols: size.cols, rows: size.rows });
-        }
-    });
-
-    // Handle window resize
-    window.addEventListener('resize', () => {
-        if (fitAddon) {
-            fitAddon.fit();
-        }
-    });
-
-    updateConnectionStatus('connecting');
-}
-
-function stopTerminal() {
-    if (terminalSocket) {
-        terminalSocket.emit('terminal-kill');
-        terminalSocket.disconnect();
-        terminalSocket = null;
-    }
-
-    if (terminal) {
-        terminal.dispose();
-        terminal = null;
-    }
-
-    isConnected = false;
-    updateConnectionStatus('disconnected');
-    updateButtons(false);
-
-    // Show placeholder
-    const terminalElement = document.getElementById('terminal');
-    terminalElement.innerHTML = `
-        <div class="terminal-placeholder">
-            <div class="text-center py-5">
-                <i class="bi bi-terminal display-4 text-muted"></i>
-                <h5 class="mt-3 text-muted">Terminal Stopped</h5>
-                <p class="text-muted">Click "Start Terminal" to begin a new session</p>
-            </div>
-        </div>
-    `;
-}
-
-function authenticateCloudflared() {
-    if (!isConnected || !terminalSocket) {
-        alert('Please start the terminal first');
-        return;
-    }
-
-    terminalSocket.emit('terminal-auth');
-}
-
-function clearTerminal() {
-    if (terminal) {
-        terminal.clear();
-    }
-}
-
-function updateConnectionStatus(status) {
-    const statusElement = document.getElementById('connectionStatus');
-    const statusText = document.getElementById('statusText');
-    
-    if (!statusElement || !statusText) {
-        console.log('Status elements not found:', { statusElement, statusText });
-        return;
-    }
-
-    statusElement.style.display = 'block';
-    statusElement.className = 'alert';
-
-    switch (status) {
-        case 'connected':
-            statusElement.classList.add('alert-success');
-            statusText.innerHTML = '<i class="bi bi-check-circle"></i> Terminal Connected';
-            break;
-        case 'connecting':
-            statusElement.classList.add('alert-warning');
-            statusText.innerHTML = '<i class="bi bi-arrow-clockwise pulse"></i> Connecting to terminal...';
-            break;
-        case 'disconnected':
-            statusElement.classList.add('alert-secondary');
-            statusText.innerHTML = '<i class="bi bi-x-circle"></i> Terminal Disconnected';
-            break;
-    }
-}
-
-function updateButtons(connected) {
-    const startButton = document.getElementById('startButton');
-    const stopButton = document.getElementById('stopButton');
-    const authButton = document.getElementById('authButton');
-    const clearButton = document.getElementById('clearButton');
-    
-    console.log('Updating buttons, connected:', connected);
-    
-    if (startButton) {
-        startButton.disabled = connected;
-        startButton.style.display = connected ? 'none' : 'inline-block';
-    }
-    if (stopButton) {
-        stopButton.disabled = !connected;
-        stopButton.style.display = connected ? 'inline-block' : 'none';
-    }
-    if (authButton) {
-        authButton.disabled = !connected;
-    }
-    if (clearButton) {
-        clearButton.disabled = !connected;
-    }
-}
 </script>
 
 <style>
-.terminal-container {
-    height: 500px;
+.terminal-output {
     background-color: #1e1e1e;
+    color: #d4d4d4;
+    border: none;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 14px;
+    line-height: 1.4;
+    resize: vertical;
+    min-height: 400px;
     border-radius: 0 0 0.375rem 0.375rem;
 }
 
-.terminal-placeholder {
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: #f8f9fa;
-    border-radius: 0 0 0.375rem 0.375rem;
+.terminal-output:focus {
+    background-color: #1e1e1e;
+    color: #d4d4d4;
+    border: none;
+    box-shadow: none;
+    outline: none;
 }
 
-.xterm {
-    height: 100% !important;
-    padding: 10px;
+.terminal-output::placeholder {
+    color: #6c757d;
+    font-style: italic;
 }
 
-.xterm-viewport {
-    overflow-y: auto;
+.quick-command-btn {
+    transition: all 0.2s ease;
+}
+
+.quick-command-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.badge {
+    font-size: 0.75rem;
+}
+
+.alert {
+    animation: slideInDown 0.3s ease;
+}
+
+@keyframes slideInDown {
+    from {
+        transform: translateY(-20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
 }
 </style>
 

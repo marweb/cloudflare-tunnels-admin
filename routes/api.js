@@ -39,14 +39,9 @@ router.post('/install-cloudflared', async (req, res) => {
   await tunnelController.installCloudflared(req, res);
 });
 
-// Get Docker containers with tunnel labels
-router.get('/containers', async (req, res) => {
-  await tunnelController.getContainerTunnels(req, res);
-});
-
-// Create tunnel from container
-router.post('/containers/create-tunnel', async (req, res) => {
-  await tunnelController.createTunnelFromContainer(req, res);
+// Execute terminal command
+router.post('/terminal/execute', async (req, res) => {
+  await tunnelController.executeTerminalCommand(req, res);
 });
 
 // WebSocket handling for real-time logs and terminal

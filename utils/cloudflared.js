@@ -322,6 +322,63 @@ class CloudflaredManager {
     });
   }
 
+  // Delete DNS route for tunnel
+  async deleteDNSRoute(tunnelName, hostname) {
+    return new Promise((resolve, reject) => {
+      console.log(`🗑️ Deleting DNS route for tunnel ${tunnelName} -> ${hostname}`);
+      
+      const process = this.executeCommand(['tunnel', 'route', 'dns', '--overwrite-dns', tunnelName, hostname]);
+      let output = '';
+      let error = '';
+
+      process.stdout.on('data', (data) => {
+        output += data.toString();
+      });
+
+      process.stderr.on('data', (data) => {
+        error += data.toString();
+      });
+
+      process.on('close', (code) => {
+        if (code === 0) {
+          console.log(`🗑️ DNS route deleted successfully: ${hostname}`);
+          resolve({ success: true, output });
+        } else {
+          console.warn(`🗑️ Warning: Could not delete DNS route: ${error}`);
+          // Don't reject here, as DNS cleanup is not critical for tunnel deletion
+          resolve({ success: false, error: error || 'Failed to delete DNS route' });
+        }
+      });
+    });
+  }
+
+  // Get hostname from tunnel config file
+  async getHostnameFromConfig(tunnelName) {
+    try {
+      const configPath = `/etc/cloudflared/${tunnelName}.yml`;
+      const fs = require('fs-extra');
+      
+      if (!(await fs.pathExists(configPath))) {
+        return null;
+      }
+      
+      const configContent = await fs.readFile(configPath, 'utf8');
+      const lines = configContent.split('\n');
+      
+      for (const line of lines) {
+        if (line.trim().startsWith('- hostname:')) {
+          const hostname = line.split('hostname:')[1]?.trim();
+          return hostname;
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('Error reading hostname from config:', error);
+      return null;
+    }
+  }
+
   // Delete a tunnel
   async deleteTunnel(name) {
     return new Promise((resolve, reject) => {

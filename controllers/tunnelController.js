@@ -229,12 +229,29 @@ class TunnelController {
         });
       }
 
+      // Get hostname from config before deleting files (for DNS cleanup)
+      const hostname = await this.cloudflared.getHostnameFromConfig(name);
+      console.log(`🗑️ Found hostname for tunnel ${name}: ${hostname}`);
+
       // Stop and disable service first
       try {
         await this.systemd.stopService(name);
         await this.systemd.disableService(name);
       } catch (error) {
         console.warn('Warning: Could not stop/disable service:', error.message);
+      }
+
+      // Delete DNS route if hostname was found
+      if (hostname) {
+        try {
+          console.log(`🗑️ Attempting to delete DNS route: ${hostname}`);
+          await this.cloudflared.deleteDNSRoute(name, hostname);
+        } catch (error) {
+          console.warn('Warning: Could not delete DNS route:', error.message);
+          // Continue with tunnel deletion even if DNS cleanup fails
+        }
+      } else {
+        console.warn('Warning: Could not find hostname for DNS cleanup');
       }
 
       // Remove config and service files
@@ -245,7 +262,7 @@ class TunnelController {
 
       res.json({ 
         success: true, 
-        message: `Tunnel "${name}" deleted successfully` 
+        message: `Tunnel "${name}" deleted successfully${hostname ? ' (DNS route also removed)' : ''}` 
       });
 
     } catch (error) {
@@ -362,107 +379,105 @@ class TunnelController {
     }
   }
 
-  // Get Docker containers with tunnel labels
-  async getContainerTunnels(req, res) {
+  // Execute terminal command (simplified terminal)
+  async executeTerminalCommand(req, res) {
     try {
-      const dockerAvailable = await this.docker.isDockerAvailable();
-      if (!dockerAvailable) {
-        return res.json({ 
-          success: true, 
-          containers: [],
-          message: 'Docker not available' 
+      const { command } = req.body;
+      
+      if (!command) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Command is required' 
         });
       }
 
-      const containers = await this.docker.getAllTunnelConfigs();
-      res.json({ 
-        success: true, 
-        containers: containers 
+      // Security: Only allow specific safe commands
+      const allowedCommands = [
+        'cloudflared tunnel login',
+        'cloudflared tunnel list',
+        'cloudflared version',
+        'cloudflared --version',
+        'ls -la /etc/cloudflared/',
+        'ls -la /home/appuser/.cloudflared/',
+        'whoami',
+        'pwd',
+        'date',
+        'uname -a'
+      ];
+
+      // Check if command starts with any allowed command
+      const isAllowed = allowedCommands.some(allowed => 
+        command.trim().toLowerCase().startsWith(allowed.toLowerCase())
+      );
+
+      if (!isAllowed) {
+        return res.json({
+          success: false,
+          error: `Command not allowed. Allowed commands: ${allowedCommands.join(', ')}`
+        });
+      }
+
+      // Execute the command
+      const output = await this.executeCommand(command);
+      
+      res.json({
+        success: true,
+        output: output,
+        command: command
       });
 
     } catch (error) {
-      console.error('Get container tunnels error:', error);
-      res.status(500).json({ 
-        success: false, 
-        error: error.message 
+      console.error('Execute terminal command error:', error);
+      res.json({
+        success: false,
+        error: error.message,
+        output: `Error executing command: ${error.message}`
       });
     }
   }
 
-  // Create tunnel from container configuration
-  async createTunnelFromContainer(req, res) {
-    try {
-      const { containerName } = req.body;
+  // Helper method to execute commands safely
+  async executeCommand(command) {
+    return new Promise((resolve, reject) => {
+      const { exec } = require('child_process');
       
-      if (!containerName) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'Container name is required' 
-        });
-      }
-
-      // Get container tunnel configuration
-      const config = await this.docker.getTunnelConfigFromContainer(containerName);
-      if (!config) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'Container does not have tunnel configuration or is not running' 
-        });
-      }
-
-      // Ensure cloudflared is installed
-      await this.cloudflared.ensureInstalled();
-
-      // Create the tunnel with container name
-      const tunnelName = `container-${containerName}`;
-      await this.cloudflared.createTunnel(tunnelName);
-
-      // Generate config pointing to container service
-      const configContent = this.config.generateConfig(
-        tunnelName, 
-        config.hostname, 
-        config.port,
-        config.fallback
-      );
-
-      // Replace localhost with container IP or name
-      const containerServiceUrl = this.containerMode 
-        ? `http://${containerName}:${config.port}`
-        : config.service;
+      // Set timeout for command execution
+      const timeout = 30000; // 30 seconds
       
-      const updatedConfig = configContent.replace(
-        `http://localhost:${config.port}`,
-        containerServiceUrl
-      );
-
-      await this.config.writeConfig(tunnelName, updatedConfig);
-
-      // Create systemd service
-      await this.config.writeSystemdService(tunnelName);
-
-      // Auto-start the tunnel
-      await this.systemd.enableService(tunnelName);
-      await this.systemd.startService(tunnelName);
-
-      res.json({ 
-        success: true, 
-        message: `Tunnel "${tunnelName}" created for container "${containerName}"`,
-        tunnel: { 
-          name: tunnelName, 
-          hostname: config.hostname, 
-          service: containerServiceUrl,
-          container: containerName
+      exec(command, { 
+        timeout: timeout,
+        cwd: '/app',
+        env: {
+          ...process.env,
+          HOME: '/home/appuser',
+          USER: 'appuser'
         }
+      }, (error, stdout, stderr) => {
+        if (error) {
+          // Handle timeout specifically
+          if (error.code === 'ETIMEDOUT') {
+            reject(new Error('Command timed out after 30 seconds'));
+          } else {
+            reject(new Error(`Command failed: ${error.message}`));
+          }
+          return;
+        }
+        
+        // Combine stdout and stderr for complete output
+        let output = '';
+        if (stdout) output += stdout;
+        if (stderr) output += stderr;
+        
+        // If no output, provide a default message
+        if (!output.trim()) {
+          output = 'Command executed successfully (no output)';
+        }
+        
+        resolve(output);
       });
-
-    } catch (error) {
-      console.error('Create tunnel from container error:', error);
-      res.status(500).json({ 
-        success: false, 
-        error: error.message 
-      });
-    }
+    });
   }
+
 }
 
 module.exports = TunnelController;

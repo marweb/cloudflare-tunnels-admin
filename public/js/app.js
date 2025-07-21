@@ -291,119 +291,14 @@ async function installCloudflared() {
     }
 }
 
-// Refresh containers
-async function refreshContainers() {
-    try {
-        const response = await fetch('/api/containers');
-        const result = await response.json();
 
-        if (result.success) {
-            displayContainers(result.containers);
-        } else {
-            showAlert('warning', result.message || 'Failed to load containers');
-        }
-    } catch (error) {
-        console.error('Error refreshing containers:', error);
-        showAlert('danger', 'Failed to refresh containers: ' + error.message);
-    }
-}
-
-// Display containers in grid
-function displayContainers(containers) {
-    const containersGrid = document.getElementById('containersGrid');
-    if (!containersGrid) return;
-
-    if (!containers || containers.length === 0) {
-        containersGrid.innerHTML = `
-            <div class="col-12">
-                <div class="text-center py-4">
-                    <i class="bi bi-box display-4 text-muted"></i>
-                    <h5 class="mt-3 text-muted">No Docker Containers Found</h5>
-                    <p class="text-muted">No containers with tunnel labels detected.</p>
-                    <small class="text-muted">
-                        Add labels to your containers:<br>
-                        <code>tunnel.enable=true</code><br>
-                        <code>tunnel.hostname=your.domain.com</code><br>
-                        <code>tunnel.port=80</code>
-                    </small>
-                </div>
-            </div>
-        `;
-        return;
-    }
-
-    const containerCards = containers.map(container => `
-        <div class="col-md-6 col-lg-4 mb-4">
-            <div class="card border-info">
-                <div class="card-header d-flex justify-content-between align-items-center bg-light">
-                    <h6 class="card-title mb-0">
-                        <i class="bi bi-box"></i>
-                        ${container.name}
-                    </h6>
-                    <span class="badge bg-info">Container</span>
-                </div>
-                <div class="card-body">
-                    <p class="card-text">
-                        <small class="text-muted">
-                            <i class="bi bi-globe"></i>
-                            <strong>Hostname:</strong> ${container.hostname}<br>
-                            <i class="bi bi-hdd-network"></i>
-                            <strong>Service:</strong> ${container.service}<br>
-                            <i class="bi bi-activity"></i>
-                            <strong>Status:</strong> ${container.containerStatus}
-                        </small>
-                    </p>
-                    <div class="d-grid">
-                        <button type="button" class="btn btn-info btn-sm" 
-                                onclick="createTunnelFromContainer('${container.name}')">
-                            <i class="bi bi-plus-circle"></i>
-                            Create Tunnel
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `).join('');
-
-    containersGrid.innerHTML = containerCards;
-}
-
-// Create tunnel from container
-async function createTunnelFromContainer(containerName) {
-    document.getElementById('loadingText').textContent = `Creating tunnel for ${containerName}...`;
-    loadingModal.show();
-
-    try {
-        const response = await fetch('/api/containers/create-tunnel', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ containerName })
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-            showAlert('success', result.message);
-            setTimeout(() => window.location.reload(), 1000);
-        } else {
-            showAlert('danger', result.error || 'Failed to create tunnel from container');
-        }
-    } catch (error) {
-        console.error('Error creating tunnel from container:', error);
-        showAlert('danger', 'Failed to create tunnel: ' + error.message);
-    } finally {
-        loadingModal.hide();
-    }
-}
 
 // Log page specific functions
+let logUpdateInterval = null;
+
 function initializeLogPage() {
     const toggleButton = document.getElementById('toggleLogs');
-    const logTerminal = document.getElementById('logTerminal');
-    const autoScrollCheckbox = document.getElementById('autoScroll');
-
+    
     if (toggleButton) {
         toggleButton.addEventListener('click', toggleLogStream);
     }
@@ -415,7 +310,6 @@ function initializeLogPage() {
 // Toggle log streaming
 function toggleLogStream() {
     const toggleButton = document.getElementById('toggleLogs');
-    const buttonIcon = toggleButton.querySelector('i');
     
     if (!logStreaming) {
         // Start streaming
@@ -425,13 +319,7 @@ function toggleLogStream() {
         toggleButton.classList.add('btn-outline-danger');
         
         updateConnectionStatus('connecting');
-        socket.emit('start-logs', { tunnelName: window.tunnelName });
-        
-        // Clear terminal
-        const logTerminal = document.getElementById('logTerminal');
-        logTerminal.innerHTML = '';
-        logLineCount = 0;
-        updateLogCount();
+        startLogPolling();
         
     } else {
         // Stop streaming
@@ -448,8 +336,67 @@ function stopLogStream() {
     toggleButton.classList.remove('btn-outline-danger');
     toggleButton.classList.add('btn-outline-primary');
     
-    socket.emit('stop-logs');
+    if (logUpdateInterval) {
+        clearInterval(logUpdateInterval);
+        logUpdateInterval = null;
+    }
+    
     updateConnectionStatus('disconnected');
+}
+
+// Start polling log file for updates
+function startLogPolling() {
+    // Clear existing logs
+    const logDisplay = document.getElementById('logDisplay');
+    if (logDisplay) {
+        logDisplay.value = '';
+        logLineCount = 0;
+        updateLogCount();
+    }
+    
+    // Initial load
+    loadLogContent();
+    
+    // Poll every 2 seconds for updates
+    logUpdateInterval = setInterval(loadLogContent, 2000);
+}
+
+// Load log content from server
+async function loadLogContent() {
+    try {
+        const response = await fetch(`/api/tunnels/${window.tunnelName}/logs`);
+        const result = await response.json();
+        
+        if (result.success) {
+            const logDisplay = document.getElementById('logDisplay');
+            if (logDisplay && result.logs) {
+                // Update textarea content
+                logDisplay.value = result.logs;
+                
+                // Count lines
+                logLineCount = result.logs.split('\n').filter(line => line.trim()).length;
+                updateLogCount();
+                
+                // Auto-scroll to bottom if enabled
+                const autoScroll = document.getElementById('autoScroll');
+                if (autoScroll && autoScroll.checked) {
+                    logDisplay.scrollTop = logDisplay.scrollHeight;
+                }
+                
+                // Update last update time
+                updateLastUpdateTime();
+                
+                // Update connection status
+                updateConnectionStatus('connected');
+            }
+        } else {
+            console.warn('Failed to load logs:', result.error);
+            updateConnectionStatus('disconnected');
+        }
+    } catch (error) {
+        console.error('Error loading logs:', error);
+        updateConnectionStatus('disconnected');
+    }
 }
 
 // Update connection status
@@ -465,65 +412,38 @@ function updateConnectionStatus(status) {
     switch (status) {
         case 'connected':
             statusElement.classList.add('alert-success');
-            statusText.innerHTML = '<i class="bi bi-check-circle status-connected"></i> Connected - Streaming logs';
+            statusText.innerHTML = '<i class="bi bi-check-circle"></i> Connected - Live logs active';
             break;
         case 'connecting':
             statusElement.classList.add('alert-warning');
-            statusText.innerHTML = '<i class="bi bi-arrow-clockwise status-connecting pulse"></i> Connecting...';
+            statusText.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Loading logs...';
             break;
         case 'disconnected':
             statusElement.classList.add('alert-secondary');
-            statusText.innerHTML = '<i class="bi bi-x-circle status-disconnected"></i> Disconnected';
+            statusText.innerHTML = '<i class="bi bi-x-circle"></i> Disconnected';
             break;
     }
 }
 
-// Append log line to terminal
-function appendLogLine(data) {
-    const logTerminal = document.getElementById('logTerminal');
-    if (!logTerminal) return;
-
-    // Create log line element
-    const logLine = document.createElement('div');
-    logLine.className = 'log-line';
-    
-    // Detect log level and apply styling
-    const line = data.toString();
-    if (line.toLowerCase().includes('error')) {
-        logLine.classList.add('error');
-    } else if (line.toLowerCase().includes('warning') || line.toLowerCase().includes('warn')) {
-        logLine.classList.add('warning');
-    } else if (line.toLowerCase().includes('info')) {
-        logLine.classList.add('info');
-    } else if (line.toLowerCase().includes('success')) {
-        logLine.classList.add('success');
+// Update last update time
+function updateLastUpdateTime() {
+    const lastUpdate = document.getElementById('lastUpdate');
+    if (lastUpdate) {
+        const now = new Date();
+        lastUpdate.textContent = `Updated: ${now.toLocaleTimeString()}`;
     }
-    
-    // Add timestamp
-    const timestamp = new Date().toLocaleTimeString();
-    logLine.textContent = `[${timestamp}] ${line}`;
-    
-    logTerminal.appendChild(logLine);
-    logLineCount++;
-    updateLogCount();
-    
-    // Auto-scroll if enabled
-    const autoScroll = document.getElementById('autoScroll');
-    if (autoScroll && autoScroll.checked) {
-        logTerminal.scrollTop = logTerminal.scrollHeight;
-    }
-    
-    // Update connection status to connected when we receive data
-    updateConnectionStatus('connected');
 }
 
 // Clear logs
 function clearLogs() {
-    const logTerminal = document.getElementById('logTerminal');
-    if (logTerminal) {
-        logTerminal.innerHTML = '';
+    const logDisplay = document.getElementById('logDisplay');
+    if (logDisplay) {
+        logDisplay.value = '';
         logLineCount = 0;
         updateLogCount();
+        
+        // Update last update time
+        updateLastUpdateTime();
     }
 }
 
