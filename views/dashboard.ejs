@@ -110,6 +110,18 @@
                             ID: <%= tunnel.id %>
                         </small>
                     </p>
+                    
+                    <!-- Auto-start toggle -->
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="autoStart-<%= tunnel.name %>" 
+                               <%= tunnel.autoStart ? 'checked' : '' %>
+                               onchange="toggleAutoStart('<%= tunnel.name %>', this.checked)">
+                        <label class="form-check-label" for="autoStart-<%= tunnel.name %>">
+                            <i class="bi bi-arrow-clockwise"></i>
+                            Auto-start on restart
+                        </label>
+                    </div>
+                    
                     <div class="btn-group w-100" role="group">
                         <% if (tunnel.active) { %>
                         <button type="button" class="btn btn-outline-danger btn-sm" onclick="stopTunnel('<%= tunnel.name %>')">

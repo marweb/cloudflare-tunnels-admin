@@ -24,6 +24,11 @@ router.delete('/tunnels/:name', async (req, res) => {
   await tunnelController.deleteTunnel(req, res);
 });
 
+// Toggle auto-start for tunnel
+router.post('/tunnels/:name/autostart', async (req, res) => {
+  await tunnelController.toggleAutoStart(req, res);
+});
+
 // Get tunnel status
 router.get('/tunnels/:name/status', async (req, res) => {
   await tunnelController.getTunnelStatus(req, res);

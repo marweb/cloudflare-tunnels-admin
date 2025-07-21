@@ -43,18 +43,24 @@ class TunnelController {
       }
       
       const services = await this.systemd.getAllTunnelServices();
+    
+    // Get auto-start state for all tunnels
+    const tunnelState = await this.stateManager.loadState();
+    
+    // Merge tunnel data with service status and auto-start state
+    const tunnelData = tunnels.map(tunnel => {
+      const service = services.find(s => s.name === tunnel.name);
+      const isAutoStartEnabled = tunnelState[tunnel.name] && tunnelState[tunnel.name].enabled;
       
-      // Merge tunnel data with service status
-      const tunnelData = tunnels.map(tunnel => {
-        const service = services.find(s => s.name === tunnel.name);
-        return {
-          ...tunnel,
-          status: service ? service.status : 'inactive',
-          active: service ? service.active : false,
-          running: service ? service.running : false,
-          hasConfig: false // Will be checked individually if needed
-        };
-      });
+      return {
+        ...tunnel,
+        status: service ? service.status : 'inactive',
+        active: service ? service.active : false,
+        running: service ? service.running : false,
+        hasConfig: false, // Will be checked individually if needed
+        autoStart: isAutoStartEnabled || false
+      };
+    });
 
       res.render('dashboard', {
         title: 'Cloudflare Tunnel Admin',
@@ -444,6 +450,70 @@ class TunnelController {
         success: false,
         error: error.message,
         output: `Error executing command: ${error.message}`
+      });
+    }
+  }
+
+  // Toggle auto-start for existing tunnel
+  async toggleAutoStart(req, res) {
+    try {
+      const { name } = req.params;
+      const { enabled } = req.body;
+      
+      if (!name) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Tunnel name is required' 
+        });
+      }
+
+      if (typeof enabled !== 'boolean') {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'enabled must be a boolean value' 
+        });
+      }
+
+      console.log(`🔄 Toggling auto-start for tunnel: ${name} to ${enabled}`);
+
+      if (enabled) {
+        // Get tunnel info to save in state
+        const tunnels = await this.cloudflared.listTunnels();
+        const tunnel = tunnels.find(t => t.name === name);
+        
+        if (!tunnel) {
+          return res.status(404).json({ 
+            success: false, 
+            error: 'Tunnel not found' 
+          });
+        }
+
+        // Enable tunnel in state manager
+        await this.stateManager.enableTunnel(name, {
+          hostname: tunnel.hostname || 'unknown',
+          port: tunnel.port || 80,
+          uuid: tunnel.uuid || tunnel.id,
+          fallback: tunnel.fallback || null
+        });
+        
+        console.log(`✅ Auto-start enabled for tunnel: ${name}`);
+      } else {
+        // Disable tunnel in state manager
+        await this.stateManager.disableTunnel(name);
+        console.log(`⏸️ Auto-start disabled for tunnel: ${name}`);
+      }
+
+      res.json({ 
+        success: true, 
+        message: `Auto-start ${enabled ? 'enabled' : 'disabled'} for tunnel "${name}"`,
+        autoStart: enabled
+      });
+
+    } catch (error) {
+      console.error('Toggle auto-start error:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: error.message 
       });
     }
   }

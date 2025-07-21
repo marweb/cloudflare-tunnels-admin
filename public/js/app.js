@@ -230,6 +230,44 @@ async function stopTunnel(name) {
     }
 }
 
+// Toggle auto-start for tunnel
+async function toggleAutoStart(name, enabled) {
+    try {
+        console.log(`🔄 Toggling auto-start for ${name}: ${enabled}`);
+        
+        const response = await fetch(`/api/tunnels/${name}/autostart`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ enabled: enabled })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showAlert('success', result.message);
+            console.log(`✅ Auto-start ${enabled ? 'enabled' : 'disabled'} for ${name}`);
+        } else {
+            // Revert the toggle if the request failed
+            const toggle = document.getElementById(`autoStart-${name}`);
+            if (toggle) {
+                toggle.checked = !enabled;
+            }
+            showAlert('danger', result.error || 'Failed to toggle auto-start');
+        }
+    } catch (error) {
+        console.error('Toggle auto-start error:', error);
+        
+        // Revert the toggle if there was an error
+        const toggle = document.getElementById(`autoStart-${name}`);
+        if (toggle) {
+            toggle.checked = !enabled;
+        }
+        showAlert('danger', 'Error toggling auto-start: ' + error.message);
+    }
+}
+
 // Delete tunnel
 async function deleteTunnel(name) {
     if (!confirm(`Are you sure you want to delete tunnel "${name}"? This action cannot be undone.`)) {
