@@ -44,50 +44,66 @@ if ! command -v systemctl &> /dev/null; then
     echo "⚠️  Warning: systemctl not found. Some features may not work properly."
 fi
 
-# Auto-start tunnels that should be running
-echo "🔄 Checking for tunnels to auto-start..."
-if [ -d "/etc/cloudflared" ]; then
-    # Find all tunnel config files
-    for config_file in /etc/cloudflared/*.yml; do
-        if [ -f "$config_file" ]; then
-            tunnel_name=$(basename "$config_file" .yml)
-            service_file="/etc/systemd/system/cloudflared-${tunnel_name}.service"
-            
-            # Check if service file exists (indicates tunnel should be enabled)
-            if [ -f "$service_file" ]; then
-                echo "🚀 Auto-starting tunnel: $tunnel_name"
-                
-                # Extract tunnel UUID from config file
-                tunnel_uuid=$(grep "^tunnel:" "$config_file" | awk '{print $2}')
-                credentials_file=$(grep "^credentials-file:" "$config_file" | awk '{print $2}')
-                
-                if [ -n "$tunnel_uuid" ] && [ -f "$credentials_file" ]; then
-                    # Start tunnel as true daemon process
-                    setsid cloudflared tunnel --config "$config_file" run "$tunnel_uuid" > "/var/log/cloudflared-${tunnel_name}.log" 2>&1 < /dev/null &
-                    tunnel_pid=$!
-                    disown $tunnel_pid  # Completely detach from shell
-                    echo "✅ Started tunnel $tunnel_name with UUID $tunnel_uuid (PID: $tunnel_pid)"
-                else
-                    echo "⚠️  Skipping tunnel $tunnel_name - missing UUID or credentials file"
-                fi
-            else
-                echo "ℹ️  Tunnel $tunnel_name not enabled for auto-start"
-            fi
-        fi
-    done
-else
-    echo "ℹ️  No tunnels directory found, skipping auto-start"
-fi
+# Initialize and start robust tunnel auto-start system
+echo "🔄 Initializing robust tunnel auto-start system..."
+
+# Create a Node.js script to handle tunnel auto-start
+cat > /tmp/tunnel-autostart.js << 'EOF'
+const TunnelAutoStart = require('/app/utils/tunnelAutoStart');
+
+async function main() {
+    const autoStart = new TunnelAutoStart();
+    
+    try {
+        console.log('🔧 Initializing tunnel auto-start system...');
+        await autoStart.initialize();
+        
+        console.log('🚀 Starting all enabled tunnels...');
+        const result = await autoStart.startAllEnabledTunnels();
+        
+        console.log(`✅ Auto-start completed: ${result.started} started, ${result.failed} failed`);
+        
+        // Start health monitoring
+        console.log('💓 Starting tunnel health monitoring...');
+        autoStart.startHealthMonitoring(30000); // Check every 30 seconds
+        
+        // Show tunnel statuses
+        console.log('📊 Current tunnel statuses:');
+        const statuses = await autoStart.getTunnelStatuses();
+        statuses.forEach(status => {
+            const statusIcon = status.running ? '✅' : (status.enabled ? '⚠️' : 'ℹ️');
+            const runningText = status.running ? `(PID: ${status.pid})` : 'stopped';
+            console.log(`${statusIcon} ${status.name}: ${status.enabled ? 'enabled' : 'disabled'}, ${runningText}`);
+        });
+        
+        // Keep the process alive for health monitoring
+        process.on('SIGTERM', () => {
+            console.log('🛑 Stopping tunnel health monitoring...');
+            autoStart.stopHealthMonitoring();
+            process.exit(0);
+        });
+        
+        // Don't exit - keep monitoring
+        console.log('🔄 Tunnel auto-start system is now running in background...');
+        
+    } catch (error) {
+        console.error('❌ Failed to initialize tunnel auto-start:', error);
+        process.exit(1);
+    }
+}
+
+main();
+EOF
+
+# Run the tunnel auto-start system in background
+echo "🚀 Starting tunnel auto-start system..."
+node /tmp/tunnel-autostart.js &
+TUNNEL_AUTOSTART_PID=$!
+echo "✅ Tunnel auto-start system running (PID: $TUNNEL_AUTOSTART_PID)"
 
 # Wait a moment for tunnels to initialize
-if [ -d "/etc/cloudflared" ] && [ "$(ls -A /etc/cloudflared/*.yml 2>/dev/null)" ]; then
-    echo "⏳ Waiting 3 seconds for tunnels to initialize..."
-    sleep 3
-    
-    # Show status of started tunnels
-    echo "📊 Tunnel status:"
-    ps aux | grep cloudflared | grep -v grep || echo "No tunnels currently running"
-fi
+echo "⏳ Waiting 5 seconds for tunnels to initialize..."
+sleep 5
 
 # Start the Node.js application
 echo "✅ Starting Node.js application on port ${PORT:-3033}..."

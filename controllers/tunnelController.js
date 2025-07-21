@@ -2,6 +2,7 @@ const CloudflaredManager = require('../utils/cloudflared');
 const ConfigManager = require('../utils/config');
 const SystemdManager = require('../utils/systemd');
 const DockerManager = require('../utils/docker');
+const TunnelStateManager = require('../utils/tunnelStateManager');
 
 class TunnelController {
   constructor() {
@@ -9,6 +10,7 @@ class TunnelController {
     this.config = new ConfigManager();
     this.systemd = new SystemdManager();
     this.docker = new DockerManager();
+    this.stateManager = new TunnelStateManager();
     this.containerMode = process.env.CONTAINER_MODE === 'true';
   }
 
@@ -137,11 +139,21 @@ class TunnelController {
         console.log(`✅ Enabling service for tunnel: ${name}`);
         await this.systemd.enableService(name);
         
+        // Mark tunnel as enabled in state manager for auto-restart
+        await this.stateManager.enableTunnel(name, {
+          hostname: hostname,
+          port: portNum,
+          uuid: tunnelUuid,
+          fallback: fallback
+        });
+        
         console.log(`🚀 Starting service for tunnel: ${name}`);
         const startResult = await this.systemd.startService(name);
         console.log(`🚀 Start service result:`, startResult);
       } else {
         console.log(`⏸️ Auto-start not requested, tunnel created but not started`);
+        // Still save the tunnel config in state but mark as disabled
+        await this.stateManager.disableTunnel(name);
       }
 
       res.json({ 
