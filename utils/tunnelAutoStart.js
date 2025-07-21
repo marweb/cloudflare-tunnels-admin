@@ -2,6 +2,7 @@ const TunnelStateManager = require('./tunnelStateManager');
 const SystemdManager = require('./systemd');
 const { spawn, exec } = require('child_process');
 const fs = require('fs-extra');
+const TunnelController = require('../controllers/tunnelController');
 
 /**
  * TunnelAutoStart - Robust auto-start system for cloudflared tunnels
@@ -13,6 +14,7 @@ class TunnelAutoStart {
     this.systemdManager = new SystemdManager();
     this.runningProcesses = new Map();
     this.healthCheckInterval = null;
+    this.tunnelController = new TunnelController();
   }
 
   /**
@@ -93,89 +95,19 @@ class TunnelAutoStart {
         throw new Error(`Config file not found: ${configFile}`);
       }
 
-      // Extract tunnel UUID and credentials from config
-      const configContent = await fs.readFile(configFile, 'utf8');
-      const tunnelUuidMatch = configContent.match(/^tunnel:\s*(.+)$/m);
-      const credentialsMatch = configContent.match(/^credentials-file:\s*(.+)$/m);
-
-      if (!tunnelUuidMatch) {
-        throw new Error('Tunnel UUID not found in config file');
-      }
-
-      const tunnelUuid = tunnelUuidMatch[1].trim();
-      const credentialsFile = credentialsMatch ? credentialsMatch[1].trim() : null;
-
-      // Verify credentials file exists
-      if (credentialsFile && !await fs.pathExists(credentialsFile)) {
-        throw new Error(`Credentials file not found: ${credentialsFile}`);
-      }
-
-      // Start the tunnel process
-      console.log(`🚀 Starting cloudflared for tunnel ${tunnelName} (UUID: ${tunnelUuid})`);
+      console.log(`🚀 Starting tunnel ${tunnelName} using unified controller logic`);
       
-      const logFile = `/var/log/cloudflared-${tunnelName}.log`;
-      await fs.ensureDir('/var/log');
-
-      // Use spawn for better process control
-      const args = ['tunnel', '--config', configFile, 'run', tunnelUuid];
-      const process = spawn('cloudflared', args, {
-        detached: true,
-        stdio: ['ignore', 'pipe', 'pipe']
-      });
-
-      // Setup logging
-      const logStream = fs.createWriteStream(logFile, { flags: 'a' });
-      process.stdout.pipe(logStream);
-      process.stderr.pipe(logStream);
-
-      // Log startup
-      logStream.write(`\n=== Tunnel ${tunnelName} started at ${new Date().toISOString()} ===\n`);
-
-      // Store process reference
-      this.runningProcesses.set(tunnelName, {
-        pid: process.pid,
-        process: process,
-        startTime: new Date(),
-        logFile: logFile
-      });
-
-      // Handle process events
-      process.on('error', (error) => {
-        console.error(`❌ Tunnel ${tunnelName} process error:`, error);
-        this.runningProcesses.delete(tunnelName);
-      });
-
-      process.on('exit', (code, signal) => {
-        console.log(`⚠️  Tunnel ${tunnelName} exited with code ${code}, signal ${signal}`);
-        this.runningProcesses.delete(tunnelName);
-        
-        // Auto-restart if enabled and not intentionally stopped
-        if (code !== 0) {
-          setTimeout(() => {
-            this.restartTunnelIfEnabled(tunnelName);
-          }, 5000); // Restart after 5 seconds
-        }
-      });
-
-      // Detach the process so it continues running independently
-      process.unref();
-
-      // Wait a moment to ensure the process started successfully
-      await this.delay(2000);
+      // Use the controller's method to start the tunnel via systemd
+      // This ensures consistent behavior between web UI and auto-start
+      const result = await this.tunnelController.startTunnelInternal(tunnelName);
       
-      // Verify the process is still running
-      const stillRunning = await this.isTunnelRunning(tunnelName);
-      if (!stillRunning) {
-        throw new Error('Tunnel process failed to start or exited immediately');
+      if (result.success) {
+        console.log(`✅ Tunnel ${tunnelName} started successfully via controller`);
+      } else {
+        console.error(`❌ Controller failed to start tunnel ${tunnelName}: ${result.error}`);
       }
-
-      console.log(`✅ Tunnel ${tunnelName} started successfully (PID: ${process.pid})`);
-      return { 
-        success: true, 
-        pid: process.pid, 
-        message: `Tunnel started successfully` 
-      };
-
+      
+      return result;
     } catch (error) {
       console.error(`❌ Failed to start tunnel ${tunnelName}:`, error);
       return { 
@@ -241,8 +173,9 @@ class TunnelAutoStart {
       const isEnabled = await this.stateManager.isTunnelEnabled(tunnelName);
       if (isEnabled) {
         console.log(`🔄 Auto-restarting tunnel: ${tunnelName}`);
-        const configFile = `/etc/cloudflared/${tunnelName}.yml`;
-        await this.startTunnel(tunnelName, configFile);
+        // Use the same unified logic for restarts
+        await this.tunnelController.startTunnelInternal(tunnelName);
+        console.log(`✅ Tunnel ${tunnelName} restarted successfully via controller`);
       }
     } catch (error) {
       console.error(`❌ Failed to restart tunnel ${tunnelName}:`, error);

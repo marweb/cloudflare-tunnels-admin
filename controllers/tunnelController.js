@@ -177,7 +177,24 @@ class TunnelController {
     }
   }
 
-  // Start tunnel service
+  // Internal method to start a tunnel - can be called directly without HTTP req/res
+  async startTunnelInternal(name) {
+    try {
+      if (!name) {
+        throw new Error('Tunnel name is required');
+      }
+
+      return await this.systemd.startService(name);
+    } catch (error) {
+      console.error('Start tunnel error:', error);
+      return { 
+        success: false, 
+        error: error.message 
+      };
+    }
+  }
+
+  // Start tunnel service - HTTP endpoint
   async startTunnel(req, res) {
     try {
       const { name } = req.params;
@@ -189,7 +206,7 @@ class TunnelController {
         });
       }
 
-      const result = await this.systemd.startService(name);
+      const result = await this.startTunnelInternal(name);
       res.json(result);
 
     } catch (error) {
