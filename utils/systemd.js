@@ -490,6 +490,8 @@ After=network.target
 [Service]
 Type=simple
 User=root
+# Fix ping_group_range to enable ICMP proxy (prevents GID warnings)
+ExecStartPre=/bin/bash -c 'echo "0 2000" > /proc/sys/net/ipv4/ping_group_range || true'
 ExecStart=/usr/local/bin/cloudflared tunnel --config ${configPath} run
 Restart=always
 RestartSec=10

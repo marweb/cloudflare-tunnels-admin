@@ -18,6 +18,24 @@ sudo mkdir -p /var/log/cloudflared
 
 # Set proper permissions
 sudo chmod 755 /etc/cloudflared
+
+# Fix ping_group_range for cloudflared ICMP proxy
+echo "🔧 Fixing ping_group_range for cloudflared ICMP proxy..."
+current_range=$(cat /proc/sys/net/ipv4/ping_group_range 2>/dev/null || echo "1 0")
+echo "📋 Current ping_group_range: $current_range"
+
+# Check if GID 1000 is already in range
+if ! echo "$current_range" | grep -q "^0 " || [ "$(echo "$current_range" | awk '{print $2}')" -lt 1000 ]; then
+    echo "🔧 Updating ping_group_range to include GID 1000..."
+    if echo '0 2000' > /proc/sys/net/ipv4/ping_group_range 2>/dev/null; then
+        echo "✅ Successfully updated ping_group_range to: 0 2000"
+    else
+        echo "⚠️  Could not update ping_group_range (may need privileged container)"
+        echo "💡 ICMP proxy will be disabled but tunnels will still work"
+    fi
+else
+    echo "✅ GID 1000 is already within ping_group_range"
+fi
 sudo chmod 755 /etc/systemd/system
 sudo chmod 755 /var/log/cloudflared
 
