@@ -4,9 +4,17 @@ const socketIo = require('socket.io');
 const path = require('path');
 const fs = require('fs-extra');
 
+// Import authentication middleware
+const { 
+  initializeSession, 
+  isAuthenticated, 
+  addSessionToViews 
+} = require('./middleware/auth');
+
 // Import routes
 const tunnelRoutes = require('./routes/tunnels');
 const apiRoutes = require('./routes/api');
+const authRoutes = require('./routes/auth');
 
 const app = express();
 const server = http.createServer(app);
@@ -15,6 +23,12 @@ const io = socketIo(server);
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Initialize session middleware for authentication
+app.use(initializeSession());
+
+// Add session info to all views
+app.use(addSessionToViews);
 
 // Debug middleware for static files
 app.use((req, res, next) => {
@@ -61,9 +75,12 @@ app.get('/js/:file', (req, res) => {
   }
 });
 
-// Routes
-app.use('/', tunnelRoutes);
-app.use('/api', apiRoutes);
+// Authentication routes (public)
+app.use('/auth', authRoutes);
+
+// Protected routes (require authentication)
+app.use('/', isAuthenticated, tunnelRoutes);
+app.use('/api', isAuthenticated, apiRoutes);
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
