@@ -18,7 +18,8 @@
     "fs-extra": "^11.1.1",
     "axios": "^1.5.0",
     "tar": "^6.1.15",
-    "express-session": "^1.17.3"
+    "express-session": "^1.17.3",
+    "dotenv": "^16.3.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
